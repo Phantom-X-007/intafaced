@@ -71,6 +71,8 @@ export const en = {
   'auth.webauthn.prompt': 'Confirm with your security key.',
   'auth.logout': 'Sign out',
   'auth.session.expired': 'Your session has expired. Sign in again.',
+  'auth.email_taken': 'An account with that email already exists.',
+  'auth.handle_taken': 'That handle is already taken.',
   'auth.kyc.upgrade': 'Raise your limits',
 
   // ── trade ─────────────────────────────────────────────────────────────────

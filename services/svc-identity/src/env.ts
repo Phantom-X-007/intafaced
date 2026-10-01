@@ -107,7 +107,9 @@ const schema = serviceEnvSchema
       }, z.coerce.number().int().min(1).max(10_000_000).optional()),
       /**
        * Optional pin for `waitlist.enabled` / `referral.queue` (packages/config
-       * `envVarNameFor`). Unset → drop clock. `off` refuse-closes capture.
+       * `envVarNameFor`). Unset or blank (compose `${VAR:-}`) follows the drop
+       * clock — drop 0 opens both. Explicit `off` refuse-closes capture.
+       * A blank string is not a pin.
        */
       INTAFACED_FLAG_WAITLIST_ENABLED: z.string().optional(),
       INTAFACED_FLAG_REFERRAL_QUEUE: z.string().optional(),

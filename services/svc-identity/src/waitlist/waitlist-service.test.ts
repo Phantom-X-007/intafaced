@@ -12,6 +12,36 @@ function openService(): WaitlistService {
 }
 
 describe('WaitlistService — flag refuse-close', () => {
+  it('enrolls when the compose pin is blank — an empty string is not off', async () => {
+    const svc = new WaitlistService(new MemoryWaitlistStore(), {
+      drop: '0',
+      env: {
+        INTAFACED_FLAG_WAITLIST_ENABLED: '',
+        INTAFACED_FLAG_REFERRAL_QUEUE: '   ',
+      },
+    });
+    const first = await svc.enroll({ email: 'ada@example.com' });
+    const second = await svc.enroll({ email: 'bob@example.com', referralCode: first.entry.referralCode });
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(true);
+    expect(second.entry.referredBy).toBe(first.entry.referralCode);
+    const place = await svc.position(first.entry.referralCode);
+    expect(place.position).toBe(1);
+    expect(place.referredCount).toBe(1);
+    expect(place.queueLength).toBe(2);
+  });
+
+  it('refuses when the pin is the word off, and names the env source', async () => {
+    const svc = new WaitlistService(new MemoryWaitlistStore(), {
+      drop: '0',
+      env: { INTAFACED_FLAG_WAITLIST_ENABLED: 'off' },
+    });
+    await expect(svc.enroll({ email: 'ada@example.com' })).rejects.toMatchObject({
+      code: 'flag.waitlist.enabled.disabled',
+      source: 'env',
+    });
+  });
+
   it('enrolls at drop 0 when both flags follow the clock', async () => {
     const svc = openService();
     const out = await svc.enroll({ email: 'ada@example.com' });

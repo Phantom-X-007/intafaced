@@ -214,15 +214,20 @@ module.exports = {
             lead: "Register interest for the next release. This does not create a balance or promise a reward.",
             email: "Email",
             referralCode: "Referral code (optional)",
+            yourCode: "Your code",
             lookupCode: "Look up a referral code",
             enroll: "Enroll",
             lookup: "Look up position",
-            position: "Position"
+            position: "Position",
+            referredCount: "Referred",
+            queueLength: "Queue",
+            joined: "You are on the list.",
+            already: "This email is already on the list. The position is unchanged."
         },
         drop: {
-            unbuilt: "This drop is not open. Waitlist and referral are named unbuilt — not a silent queue.",
-            waitlistOff: "Waitlist is off (FlagDisabledError). Named unbuilt — enroll did not join a queue.",
-            referralOff: "Referral queue is off (FlagDisabledError). Named unbuilt — the code was not discarded silently."
+            unbuilt: "This drop is not open. The waitlist service is not wired on this deployment.",
+            waitlistOff: "Waitlist is switched off. The service is built and refused this enroll. The list was not written.",
+            referralOff: "The referral queue is switched off. The code was refused and the list was not written."
         },
         predict: {
             title: "Custodial outcome book",
@@ -316,6 +321,10 @@ module.exports = {
             no_surface: {
                 title: "This is not built yet",
                 body: "The screen exists because it came with the shell. The platform has no service behind it, so there is nothing to read and nothing to show. It is not loading, it is not empty, and it is not broken — it was never built. What is missing is stated below."
+            },
+            flag_off: {
+                title: "This switch is off",
+                body: "The service is built and refused this call. A flag pin or the drop clock is holding it closed. The service's own sentence is below."
             },
             invalid_response: {
                 title: "The answer was the wrong shape",
@@ -3304,6 +3313,7 @@ module.exports = {
             telno: 'Tel',
             email: 'Email',
             agreementtip: 'Click to agree',
+            agreementMissing: 'No user agreement is published. Sign-up does not record consent to a document this app cannot read.',
             modaltitle: 'Please verification',
             promotion: 'Invite Code(Optional)',
             handle: 'Handle',
@@ -3313,7 +3323,7 @@ module.exports = {
             regionerr: 'Use a two-letter country code, for example GB',
             success: 'Account created. You are signed in.',
             identityNote: 'Creates an account on the platform identity service. There is no SMS step: the identity service has no phone registration and no SMS sender, so asking for a code would be asking for something nothing can send.',
-            referralSocket: 'Not built: referral codes. The identity service has no referral field and stores no referral graph, so this form does not ask for one — a code typed here would be discarded silently, which is worse than not asking.',
+            referralSocket: 'A 12-character waitlist code joins the drop queue. An account UUID attributes the affiliate edge. They are different fields. Neither is discarded when you pasted the other.',
             mobileSocketTitle: 'Sign up with a phone number',
             mobileSocketLead: 'The mobile-web sign-up that used a phone number and an SMS code.',
             mobileSocketMissing: 'The identity service registers on a handle, an email address and a password. It has no phone identifier, and there is no SMS sender behind the front door, so neither the number nor the code has anywhere to go. Registration itself does work — by handle and email.',
@@ -3321,9 +3331,9 @@ module.exports = {
             mobileNeed2: 'An SMS sender behind the edge, and a decision about which jurisdictions it may send to.'
         },
         reg: {
-            referrer: 'Referrer UUID (optional)',
-            referrerTip: "Optional. Paste the referrer's account UUID, or leave blank. A failed referral still creates the account.",
-            referrerErr: 'Use a UUID, or leave blank.'
+            referrer: 'Referrer (optional)',
+            referrerTip: 'Optional. An account UUID attributes the affiliate edge. A 12-character waitlist code joins that queue and does not attribute an affiliate. Leave blank to do neither. A failed affiliate attribute still creates the account. A waitlist code the queue refuses is shown here and does not create the account.',
+            referrerErr: 'Use an account UUID or a 12-character waitlist code, or leave blank.'
         },
         app: {
             title: 'Mobile app',
@@ -3721,8 +3731,8 @@ module.exports = {
         helpDetail: {
             title: 'Help article',
             lead: 'A single article, by link.',
-            missing: 'No content management service exists behind the front door, so there is no article to load. This includes the user agreement and privacy policy that the sign-up form links to — those documents are not published anywhere this app can read.',
-            need1: 'The user agreement and privacy policy published somewhere the sign-up form can actually link to.'
+            missing: 'No content management service exists behind the front door, so there is no article to load. The user agreement and privacy policy are not published anywhere this app can read. Sign-up does not link to them and does not record consent.',
+            need1: 'The user agreement and privacy policy published somewhere a reader can open them.'
         },
         whitepaper: {
             title: 'Whitepaper',

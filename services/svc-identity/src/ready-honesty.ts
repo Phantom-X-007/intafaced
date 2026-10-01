@@ -9,9 +9,11 @@
  *
  * Waitlist / referral flags are the actual `INTAFACED_FLAG_*` env pin
  * (`boolean | null`), not `isEnabled` (that mixes LAUNCH_DROP into the pin).
- * Unset → null (drop clock). Empty / off → false. Same on-list as
- * packages/config `envOverride`. LAUNCH_DROP is the configured drop enum.
+ * Unset and blank → null (drop clock). Explicit off → false. Same reader as
+ * packages/config `parseFlagEnv`. LAUNCH_DROP is the configured drop enum.
  */
+import { parseFlagEnv } from '@intafaced/config';
+
 export const KYC_VAULT_UNWIRED = 'kyc_doc.unwired' as const;
 export const KYC_VAULT_UNPROBED = 'kyc_doc.unprobed' as const;
 export const LEDGER_PAYOUT_UNWIRED = 'affiliate.payout.ledger_unwired' as const;
@@ -44,12 +46,12 @@ export type IdentityLaunchDrop = '0' | 'I' | 'II' | 'III' | 'IV' | 'V';
 
 /**
  * Env pin for `INTAFACED_FLAG_WAITLIST_ENABLED` / `INTAFACED_FLAG_REFERRAL_QUEUE`.
- * Unset/null → null (follow drop). Any other string uses the config on-list.
- * Empty string is a pin-off, matching `envOverride` (not invented drop-on).
+ * Unset, null, and blank → null (follow the drop clock). Explicit off → false.
+ * Same tokens as `parseFlagEnv`. A blank compose default is not a pin-off.
  */
 export function flagEnvPin(raw: string | undefined | null): boolean | null {
-  if (raw === undefined || raw === null) return null;
-  return ['1', 'true', 'on', 'yes'].includes(raw.toLowerCase());
+  const pin = parseFlagEnv(raw);
+  return pin === undefined ? null : pin;
 }
 
 export type IdentityReadyHonesty = {

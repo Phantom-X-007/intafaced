@@ -8,7 +8,7 @@ import { INSURED_REFUSED } from './auth/insured-refuse.js';
  * 2. Break: unknown key invents English instead of echoing the dotted name
  * 3. Done bar: known key renders catalog copy; unknown key === key string
  * 4. Class N
- * 5. Paths: services/svc-identity only (do not edit packages/i18n catalog)
+ * 5. Paths: svc-identity resolves catalog keys. Taken email and handle have catalog rows.
  * 6. RED: unknown key becomes a sentence
  * 7. Collision: none vs svc-academy / svc-market / packages/i18n catalog
  */
@@ -21,6 +21,8 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(userCopy('auth.mfa_required')).toBe('Two-factor verification');
     expect(userCopy('error.kyc.required')).toBe('Verification is required for this action.');
     expect(userCopy('notify.identity.rank.updated.title')).toBe('Rank updated');
+    expect(userCopy('auth.email_taken')).toBe('An account with that email already exists.');
+    expect(userCopy('auth.handle_taken')).toBe('That handle is already taken.');
   });
 
   it('renders the dotted key when the key is not in the catalog', () => {

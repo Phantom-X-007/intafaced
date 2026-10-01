@@ -34,7 +34,12 @@
           <Input type="text" v-model="formInline.referrerId" :placeholder="$t('uc.reg.referrer')" autocomplete="off">
           </Input>
         </FormItem>
-        <p v-if="waitlistDropUnbuilt" class="ix-login-socket" role="alert">{{ $t('intafaced.drop.unbuilt') }}</p>
+        <p v-if="waitlistNotice" class="ix-login-socket" role="alert">{{ waitlistNotice }}</p>
+        <p v-if="waitlistAction.data" class="ix-login-socket" role="status">
+          {{ waitlistAction.data.created ? $t('intafaced.waitlist.joined') : $t('intafaced.waitlist.already') }}
+          {{ $t('intafaced.waitlist.position') }} <code>{{ waitlistAction.data.position }}</code>
+          · {{ $t('intafaced.waitlist.yourCode') }} <code>{{ waitlistAction.data.referralCode }}</code>
+        </p>
         <p v-if="registerError" class="ix-login-error" role="alert" aria-live="polite">{{ registerError }}</p>
         <IxState
           v-if="waitlistAction.ran && waitlistAction.reason && waitlistAction.reason !== 'ok'"
@@ -43,12 +48,7 @@
           :message="waitlistAction.message"
           endpoint="/api/identity/trpc/waitlist.enroll"
         />
-        <div class="check-agree" style="">
-          <label>
-            <Checkbox v-model="agree">{{$t('uc.regist.agreement')}}</Checkbox>
-          </label>
-          <a v-if="lang=='English'" href="/helpdetail?cate=1&id=35&cateTitle=Privacy Policy" target="_blank" style="">{{$t('uc.regist.userprotocol')}}</a>
-        </div>
+        <p class="ix-login-socket" role="note">{{ $t('uc.regist.agreementMissing') }}</p>
         <FormItem>
           <Button class="register_btn" @click="handleSubmit('formInline')" :loading="registing">{{$t('uc.regist.regist')}}</Button>
         </FormItem>
@@ -241,6 +241,8 @@ import { mutate, subjectOf } from "../../config/intafaced.js";
 import IxState from "../../components/intafaced/IxState.vue";
 import ixModule from "../../components/intafaced/module-mixin.js";
 
+var waitlistDrop = require("../../assets/js/waitlist-drop.js");
+
 /** Mirrors the contract's own handle rule, so the message can be specific. */
 const HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
 /** Deliberately permissive: svc-identity's zod `.email()` is the real check. */
@@ -252,19 +254,12 @@ const WAITLIST_CODE_RE = /^[a-fA-F0-9]{12}$/;
 /** The contract's minimum. Kept as a constant so the copy cannot drift from it. */
 const PASSWORD_MIN = 12;
 
-/**
- * Waitlist / referral drop refuse — FlagDisabledError on the wire is
- * `flag.waitlist.enabled.*` / `flag.referral.queue.*` / `waitlist.unbuilt`.
- * Named unbuilt, not a silent queue.
- */
-function isDropFlagRefuse(message) {
-  if (!message) return false;
-  return (
-    message.indexOf("flag.waitlist.enabled") !== -1 ||
-    message.indexOf("flag.referral.queue") !== -1 ||
-    message.indexOf("waitlist.unbuilt") !== -1 ||
-    message.indexOf("FlagDisabledError") !== -1
-  );
+function waitlistNoticeText(self, message) {
+  var kind = waitlistDrop.classifyWaitlistRefuse(message);
+  if (kind === "unbuilt") return self.$t("intafaced.drop.unbuilt");
+  if (kind === "referral_off") return self.$t("intafaced.drop.referralOff");
+  if (kind === "waitlist_off") return self.$t("intafaced.drop.waitlistOff");
+  return "";
 }
 
 export default {
@@ -308,9 +303,7 @@ export default {
     return {
       registing: false,
       registerError: "",
-      waitlistDropUnbuilt: false,
       waitlistAction: this.emptyAction(),
-      agree: true,
       allowRegister: true,
       formInline: {
         handle: "",
@@ -343,11 +336,11 @@ export default {
     };
   },
   computed: {
-    lang: function() {
-      return this.$store.state.lang;
-    },
     isLogin: function() {
       return this.$store.getters.isLogin;
+    },
+    waitlistNotice: function() {
+      return waitlistNoticeText(this, this.waitlistAction.message);
     }
   },
   created: function() {
@@ -368,14 +361,8 @@ export default {
         self.registing = false;
 
         if (!res.ok) {
-          if (isDropFlagRefuse(res.message)) {
-            self.waitlistDropUnbuilt = true;
-            self.registerError = self.$t("intafaced.drop.unbuilt") + " " + res.message;
-            return;
-          }
-          // Includes the case where registration is closed on this deployment
-          // ("Registration is not open yet"), which is a real answer from the
-          // service and not something to translate into a generic failure.
+          // The service sentence, including "An account with that email already
+          // exists." A waitlist refuse is its own notice and does not replace this.
           self.registerError = res.message;
           return;
         }
@@ -389,9 +376,26 @@ export default {
         });
         self.formInline.password = "";
         self.formInline.repassword = "";
+        var desc = self.$t("uc.regist.success");
+        var joined = self.waitlistAction.data;
+        if (joined && joined.referralCode) {
+          desc =
+            desc +
+            " " +
+            (joined.created ? self.$t("intafaced.waitlist.joined") : self.$t("intafaced.waitlist.already")) +
+            " " +
+            self.$t("intafaced.waitlist.position") +
+            " " +
+            joined.position +
+            ". " +
+            self.$t("intafaced.waitlist.yourCode") +
+            " " +
+            joined.referralCode +
+            ".";
+        }
         self.$Notice.success({
           title: self.$t("common.tip"),
-          desc: self.$t("uc.regist.success")
+          desc: desc
         });
         self.$router.push("/uc/safe");
       });
@@ -400,14 +404,9 @@ export default {
       var self = this;
       this.$refs[name].validate(function(valid) {
         if (!valid) return;
-        if (!self.agree) {
-          self.registerError = self.$t("uc.regist.agreementtip");
-          return;
-        }
 
         self.registing = true;
         self.registerError = "";
-        self.waitlistDropUnbuilt = false;
 
         var input = {
           handle: self.formInline.handle,
@@ -424,10 +423,11 @@ export default {
         if (waitlistCode) enrollInput.referralCode = waitlistCode;
 
         self.act("waitlistAction", mutate("identity", "waitlist.enroll", enrollInput)).then(function(res) {
-          if (!res.ok && isDropFlagRefuse(res.message)) {
-            self.waitlistDropUnbuilt = true;
-            self.waitlistAction.reason = "no_surface";
-            self.waitlistAction.message = self.$t("intafaced.drop.unbuilt") + " " + res.message;
+          var kind = waitlistDrop.classifyWaitlistRefuse(res.message);
+          var reason = waitlistDrop.waitlistRefuseReason(kind);
+          if (!res.ok && reason) {
+            self.waitlistAction.reason = reason;
+            self.waitlistAction.message = res.message;
             self.finishRegister(input);
             return;
           }
