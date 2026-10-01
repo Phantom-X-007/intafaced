@@ -134,6 +134,7 @@ assertContains(registerPage, 'uc.regist.agreementMissing', 'Register.vue states 
 assertAbsent(registerPage, 'reason = "no_surface"', 'Register.vue must not stamp a flag pin as never built');
 assertAbsent(registerPage, 'helpdetail?cate=1&id=35', 'Register.vue must not link a missing user agreement');
 assertAbsent(registerPage, 'v-model="agree"', 'Register.vue must not require consent to an unpublished document');
+assertAbsent(registerPage, '.check-agree', 'Register.vue must not keep styles for the removed agreement checkbox');
 
 assertContains(lang, 'drop: {', 'en.js intafaced.drop');
 assertContains(lang, 'unbuilt:', 'en.js intafaced.drop.unbuilt');

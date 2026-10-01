@@ -161,25 +161,6 @@
           }
         }
       }
-.check-agree {
-        color: #979797;
-        display: inline-block;
-        line-height: 30px;
-        font-size: 12px;
-        cursor: default;
-        a {
-          color: var(--ix-text, #c8c8c8);
-          margin-left: -10px;
-        }
-.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-.ivu-checkbox.ivu-checkbox-checked {
-.ivu-checkbox-inner {
-              border: 1px solid var(--ix-orange, #c8c8c8);
-              background-color: var(--ix-orange, #c8c8c8);
-            }
-          }
-        }
-      }
     }
   }
 }
@@ -492,35 +473,6 @@ export default {
                 -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
                 box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
               }
-            }
-          }
-        }
-      }
-.check-agree {
-.ivu-checkbox-wrapper {
-.ivu-checkbox-input {
-            &:focus {
-              border: none;
-              outline: none;
-              -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-              -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-              box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-            }
-          }
-        }
-.ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {
-.ivu-checkbox.ivu-checkbox-checked {
-.ivu-checkbox-inner {
-              border: 1px solid var(--ix-orange, #c8c8c8);
-              background-color: var(--ix-orange, #c8c8c8);
-            }
-          }
-
-        }
-.ivu-checkbox-wrapper.ivu-checkbox-default{
-.ivu-checkbox{
-.ivu-checkbox-inner{
-              background:transparent;
             }
           }
         }
