@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
+import { requestIpAls } from './auth/auth-service-ip.js';
 import {
   AuthError,
   assertDelegateCannotGrant,
@@ -530,7 +531,7 @@ export function createIdentityRouter(
           }
           try {
             const { referrerId, ...registerInput } = input;
-            const session = await auth.register({ ...registerInput, ip: ctx.requestId });
+            const session = await auth.register({ ...registerInput, ip: requestIpAls.getStore() });
             if (referrerId) {
               await requireReferral().attribute({ userId: session.userId, referrerId });
             }

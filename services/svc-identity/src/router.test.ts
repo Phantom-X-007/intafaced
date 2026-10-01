@@ -6,6 +6,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { SESSION_SCOPES, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createIdentityRouter } from './router.js';
+import { requestIpAls } from './auth/auth-service-ip.js';
 import { stubActionApprovals } from './auth/privileged-dual-control.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import { userCopy } from './user-copy.js';
@@ -768,6 +769,30 @@ describe('auth.register REGISTRATION_OPEN refuse-closed', () => {
 
 describe('auth.register optional referrerId', () => {
   const REFERRER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('records the client address on the session, not the request id', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    await requestIpAls.run('203.0.113.10', () =>
+      api.auth.register({
+        handle: 'newbie',
+        email: 'newbie@example.com',
+        password: 'correct horse battery staple',
+      }),
+    );
+    const arg = stub.calls.find((c) => c.method === 'register')!.args[0] as { ip?: string };
+    expect(arg.ip).toBe('203.0.113.10');
+  });
+
+  it('leaves the session address empty when no client address was seen', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    await api.auth.register({
+      handle: 'newbie',
+      email: 'newbie@example.com',
+      password: 'correct horse battery staple',
+    });
+    const arg = stub.calls.find((c) => c.method === 'register')!.args[0] as { ip?: string };
+    expect(arg.ip).toBeUndefined();
+  });
 
   it('registers without a referrer and does not call attribute', async () => {
     const attributeCalls: unknown[] = [];
