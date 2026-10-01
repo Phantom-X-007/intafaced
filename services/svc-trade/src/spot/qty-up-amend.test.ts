@@ -188,5 +188,30 @@ describe('svc-trade qty-up-amend (H8a PG-hard)', () => {
       expect(postsWithReason('order.hold.amend')).toHaveLength(1);
       expect(postsWithReason('order.hold.released')).toHaveLength(1);
     });
+
+    it('returns the extra hold when a qty-up is refused after a qty-down already released that version', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest('2', '100', 'native-qty-up-after-down');
+      const down = await trade.amendOrder(principalFor(ALICE), original.id, { qty: amt('1') });
+      expect(down).toMatchObject({ accepted: true, code: 'AMENDED' });
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('100');
+      expect(await avail(ALICE, 'USDT')).toBe('900');
+      matching.amendScript = async () => ({
+        accepted: false,
+        orderId: original.id,
+        sequence: null,
+        version: down.order.engineVersion,
+        priority: null,
+        fills: [],
+        resting: null,
+        rejected: { code: 'version_mismatch', message: 'stale' },
+        cancellations: [],
+        triggered: [],
+      });
+      const up = await trade.amendOrder(principalFor(ALICE), original.id, { qty: amt('2') });
+      expect(up).toMatchObject({ accepted: false, code: 'VERSION_MISMATCH' });
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('100');
+      expect(await avail(ALICE, 'USDT')).toBe('900');
+    });
   });
 });
