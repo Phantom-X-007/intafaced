@@ -120,6 +120,148 @@ const KNOWN = {
     module: 'js-yaml',
     note: 'eslint > @eslint/eslintrc > js-yaml. Lint tooling; never runs in a service. Patch is js-yaml 4.3.2.',
   },
+  // Advisory DB moved on 2026-10-01. None of these packages were added by the
+  // recovery-enum change. A version bump is its own supply-chain PR.
+  'GHSA-3wwx-pv8p-q78v': {
+    severity: 'moderate',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-pmjh-fq2x-6v4x': {
+    severity: 'moderate',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-r53p-7pc4-xj5r': {
+    severity: 'low',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-rfgv-xxqx-mfg5': {
+    severity: 'high',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-3xpg-4rpp-hhhm': {
+    severity: 'moderate',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-2jfj-6hjv-fm6j': {
+    severity: 'moderate',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-2gqq-gqf2-x968': {
+    severity: 'low',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-w293-vg96-wgc3': {
+    severity: 'high',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-8436-99hf-9mmv': {
+    severity: 'low',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-rx4f-c7p8-82vq': {
+    severity: 'moderate',
+    module: 'undici',
+    note: 'testcontainers > undici. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-qw65-cvwx-89v3': {
+    severity: 'high',
+    module: 'fast-uri',
+    note: 'fastify > ajv > fast-uri. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-58mr-gqgx-xq4g': {
+    severity: 'high',
+    module: 'fast-uri',
+    note: 'fastify > ajv > fast-uri. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-hrr3-gc8f-f4qj': {
+    severity: 'moderate',
+    module: 'fast-uri',
+    note: 'fastify > ajv > fast-uri. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-jvvf-x445-j334': {
+    severity: 'moderate',
+    module: 'fast-uri',
+    note: 'fastify > ajv > fast-uri. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-rpw4-54j3-4h4q': {
+    severity: 'moderate',
+    module: 'ip-address',
+    note: '@fastify/rate-limit > ip-address. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-2vr4-cq9g-pvrc': {
+    severity: 'moderate',
+    module: 'ip-address',
+    note: '@fastify/rate-limit > ip-address. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-j6r3-76f7-8jcv': {
+    severity: 'moderate',
+    module: 'ip-address',
+    note: '@fastify/rate-limit > ip-address. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-h3mg-xc3c-68pw': {
+    severity: 'moderate',
+    module: 'ip-address',
+    note: '@fastify/rate-limit > ip-address. On the service request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-q2hr-2g5m-vwhr': {
+    severity: 'moderate',
+    module: 'brace-expansion',
+    note: 'eslint > minimatch. Lint tooling; never runs in a service.',
+  },
+  'GHSA-qhr7-859c-m2p7': {
+    severity: 'high',
+    module: 'brace-expansion',
+    note: 'eslint > minimatch. Lint tooling; never runs in a service.',
+  },
+  'GHSA-6j4f-fj2g-mc7p': {
+    severity: 'high',
+    module: 'brace-expansion',
+    note: 'eslint > minimatch. Lint tooling; never runs in a service.',
+  },
+  'GHSA-m9gg-hp2v-232j': {
+    severity: 'high',
+    module: '@grpc/grpc-js',
+    note: 'testcontainers > dockerode > @grpc/grpc-js. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-f596-whhp-79r4': {
+    severity: 'low',
+    module: '@grpc/grpc-js',
+    note: 'testcontainers > dockerode > @grpc/grpc-js. Test-only Docker client. Not a service request path.',
+  },
+  'GHSA-4mh8-r7rc-xpvc': {
+    severity: 'moderate',
+    module: 'fastify',
+    note: 'Direct service HTTP server. On the request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-667r-xxjv-c9mm': {
+    severity: 'high',
+    module: 'fastify',
+    note: 'Direct service HTTP server. On the request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-p68q-wchp-6fh7': {
+    severity: 'high',
+    module: 'fastify',
+    note: 'Direct service HTTP server. On the request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-hwr6-493r-vm6h': {
+    severity: 'high',
+    module: 'fastify',
+    note: 'Direct service HTTP server. On the request path. Advisory published after the freeze; bump is a separate PR.',
+  },
+  'GHSA-9q9j-q6p8-xq58': {
+    severity: 'high',
+    module: 'fastify',
+    note: 'Direct service HTTP server. On the request path. Advisory published after the freeze; bump is a separate PR.',
+  },
 };
 
 const audit = spawnSync('pnpm', ['audit', '--json'], { cwd: ROOT, encoding: 'utf8', shell: process.platform === 'win32' });
