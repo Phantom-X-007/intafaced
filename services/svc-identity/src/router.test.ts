@@ -1797,9 +1797,7 @@ describe('waitlist door — unbuilt / flag / operator', () => {
     expect(attached.created).toBe(false);
     expect(attached.position).toBe(first.position);
     expect(attached.referredBy).toBe(ref.referralCode);
-    const err = await caller
-      .waitlist.enroll({ email: 'ada@example.com', referralCode: other.referralCode })
-      .catch((e: unknown) => e);
+    const err = await caller.waitlist.enroll({ email: 'ada@example.com', referralCode: other.referralCode }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('CONFLICT');
     expect(String((err as { message?: string }).message)).toContain('[waitlist.referral_locked]');
     expect(String((err as { message?: string }).message)).toContain('already has a referral code');

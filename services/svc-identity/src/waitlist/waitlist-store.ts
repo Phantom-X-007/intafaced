@@ -67,11 +67,7 @@ export interface WaitlistStore {
 export class WaitlistStoreError extends Error {
   constructor(
     message: string,
-    readonly code:
-      | 'waitlist.invalid'
-      | 'waitlist.unknown_referrer'
-      | 'waitlist.self_referral'
-      | 'waitlist.referral_locked',
+    readonly code: 'waitlist.invalid' | 'waitlist.unknown_referrer' | 'waitlist.self_referral' | 'waitlist.referral_locked',
   ) {
     super(message);
     this.name = 'WaitlistStoreError';
@@ -216,9 +212,7 @@ export class SqlWaitlistStore implements WaitlistStore {
     const referredBy = input.referredBy ? normalizeReferralCode(input.referredBy) : null;
 
     return transaction(this.sql, async (tx) => {
-      const settleExisting = async (
-        row: Parameters<typeof toEntry>[0],
-      ): Promise<WaitlistEnrollResult> => {
+      const settleExisting = async (row: Parameters<typeof toEntry>[0]): Promise<WaitlistEnrollResult> => {
         const entry = toEntry(row);
         const decision = lateReferralDecision(entry, referredBy);
         if (decision.kind === 'return') return { entry, created: false };
