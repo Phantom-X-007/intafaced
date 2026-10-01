@@ -64,6 +64,14 @@ type AmendHost = {
 
 const FLAG = Symbol.for('intafaced.trade.nativeQtyUpAmend');
 
+/**
+ * A qty-down already posts `order.release:<orderId>:<engineVersion>`.
+ * The refused qty-up must not reuse that key: the ledger would replay the
+ * old release and leave the extra in the order hold. Engine versions stay
+ * small. This band is only the rolled-back extra.
+ */
+const QTY_UP_ROLLBACK_SEQUENCE = 1_000_000_000;
+
 function asHost(svc: object): AmendHost {
   return svc as unknown as AmendHost;
 }
@@ -275,7 +283,7 @@ async function amendOrderWithQtyUp(
 
     if (!result.accepted) {
       if (extra > 0n) {
-        await releaseQtyUpHold(host, order, extra, expectedVersion);
+        await releaseQtyUpHold(host, order, extra, QTY_UP_ROLLBACK_SEQUENCE + expectedVersion);
       }
       if (result.rejected?.code === 'order_not_found') {
         await host.markRecoveryRequired(order.id, 'AMEND_UNKNOWN');

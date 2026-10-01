@@ -94,6 +94,13 @@ export interface OrderRow {
   created_at: Date;
 }
 
+function readLifecycleProof(value: unknown): OrderRecord['lifecycleProof'] {
+  if (value == null) return null;
+  // postgres.js can hand a jsonb string back as text. One parse, then the schema.
+  const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+  return lifecycleAdmissionProofSchema.parse(parsed);
+}
+
 export function toOrder(row: OrderRow): OrderRecord {
   return {
     id: row.id,
@@ -119,7 +126,7 @@ export function toOrder(row: OrderRow): OrderRecord {
     rejectCode: row.reject_code,
     recoveryReason: row.recovery_reason,
     reconciliationKey: row.reconciliation_key,
-    lifecycleProof: row.lifecycle_proof === null ? null : lifecycleAdmissionProofSchema.parse(row.lifecycle_proof),
+    lifecycleProof: readLifecycleProof(row.lifecycle_proof),
     replacementOf: row.replacement_of,
     replacementRequestHash: row.replacement_request_hash,
     sessionId: row.session_id ?? null,
