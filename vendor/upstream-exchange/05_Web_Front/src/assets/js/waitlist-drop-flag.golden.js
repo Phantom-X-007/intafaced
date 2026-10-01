@@ -15,6 +15,7 @@ var root = path.join(__dirname, '../../');
 var indexPage = fs.readFileSync(path.join(root, 'pages/index/Index.vue'), 'utf8');
 var registerPage = fs.readFileSync(path.join(root, 'pages/uc/Register.vue'), 'utf8');
 var lang = fs.readFileSync(path.join(root, 'assets/lang/en.js'), 'utf8');
+var helper = fs.readFileSync(path.join(__dirname, 'waitlist-drop.js'), 'utf8');
 
 function assertContains(value, needle, label) {
   if (value.indexOf(needle) === -1) {
@@ -53,6 +54,43 @@ if (drop.classifyWaitlistRefuse('Waitlist capture is not wired [waitlist.unbuilt
 if (drop.waitlistRefuseReason('unbuilt') !== 'no_surface') {
   throw new Error('unbuilt stays no_surface');
 }
+if (drop.waitlistRefuseCopyKey('waitlist_off') !== 'intafaced.drop.waitlistOff') {
+  throw new Error('waitlist_off sentence key');
+}
+if (drop.waitlistRefuseCopyKey('referral_off') !== 'intafaced.drop.referralOff') {
+  throw new Error('referral_off sentence key');
+}
+if (drop.waitlistRefuseCopyKey('unbuilt') !== 'intafaced.drop.unbuilt') {
+  throw new Error('unbuilt sentence key');
+}
+if (drop.waitlistRefuseCopyKey(null) !== '') {
+  throw new Error('a non-refuse has no drop sentence');
+}
+
+function dropSentence(message) {
+  var key = drop.waitlistRefuseCopyKey(drop.classifyWaitlistRefuse(message));
+  if (!key) return '';
+  return key
+    .replace(/^intafaced\./, '')
+    .split('.')
+    .reduce(function (node, part) {
+      return node && node[part];
+    }, require('../lang/en.js').intafaced);
+}
+
+var danenSentence = dropSentence(DANEN);
+if (String(danenSentence).indexOf('list was not written') === -1) {
+  throw new Error('Danen pin must say the list was not written');
+}
+var referralSentence = dropSentence(
+  'referral.queue is off (env): pinned off by INTAFACED_FLAG_REFERRAL_QUEUE [flag.referral.queue.disabled]',
+);
+if (String(referralSentence).indexOf('list was not written') === -1) {
+  throw new Error('referral pin must say the list was not written');
+}
+if (dropSentence('An account with that email already exists.') !== '') {
+  throw new Error('email taken must not become a drop sentence');
+}
 if (drop.classifyWaitlistRefuse('An account with that email already exists.') !== null) {
   throw new Error('email taken is not a drop refuse');
 }
@@ -65,9 +103,10 @@ assertContains(indexPage, 'mutate("identity", "waitlist.enroll"', 'Index.vue wai
 assertContains(indexPage, 'query("identity", "waitlist.position"', 'Index.vue waitlist.position query');
 assertContains(indexPage, 'classifyWaitlistRefuse', 'Index.vue classifies the refuse');
 assertContains(indexPage, 'waitlistRefuseReason', 'Index.vue maps the refuse to an IxState reason');
-assertContains(indexPage, 'intafaced.drop.unbuilt', 'Index.vue unwired copy');
-assertContains(indexPage, 'intafaced.drop.waitlistOff', 'Index.vue flag-off copy');
-assertContains(indexPage, 'intafaced.drop.referralOff', 'Index.vue referral-off copy');
+assertContains(indexPage, 'waitlistRefuseCopyKey', 'Index.vue uses the shared refuse sentence');
+assertContains(helper, 'intafaced.drop.unbuilt', 'helper unwired copy key');
+assertContains(helper, 'intafaced.drop.waitlistOff', 'helper flag-off copy key');
+assertContains(helper, 'intafaced.drop.referralOff', 'helper referral-off copy key');
 assertContains(indexPage, 'intafaced.waitlist.joined', 'Index.vue joined copy');
 assertContains(indexPage, 'intafaced.waitlist.already', 'Index.vue already-on-list copy');
 assertContains(indexPage, 'intafaced.waitlist.referredCount', 'Index.vue referred count');
@@ -81,8 +120,12 @@ assertContains(registerPage, 'waitlist-drop.js', 'Register.vue uses the shared c
 assertContains(registerPage, 'mutate("identity", "waitlist.enroll"', 'Register.vue waitlist.enroll caller');
 assertContains(registerPage, 'classifyWaitlistRefuse', 'Register.vue classifies the refuse');
 assertContains(registerPage, 'waitlistRefuseReason', 'Register.vue maps the refuse');
-assertContains(registerPage, 'intafaced.drop.unbuilt', 'Register.vue unwired copy');
-assertContains(registerPage, 'intafaced.drop.waitlistOff', 'Register.vue flag-off copy');
+assertContains(registerPage, 'waitlistRefuseCopyKey', 'Register.vue uses the shared refuse sentence');
+assertContains(
+  registerPage,
+  'waitlistNoticeText(self, self.waitlistAction && self.waitlistAction.message)',
+  'Register success notice repeats the refuse sentence after navigation',
+);
 assertContains(registerPage, 'intafaced.waitlist.joined', 'Register.vue shows the queue place');
 assertContains(registerPage, 'intafaced.waitlist.yourCode', 'Register.vue shows the issued code');
 assertContains(registerPage, 'IxState', 'Register.vue IxState');
@@ -145,7 +188,10 @@ assertContains(indexPage, 'intafaced.waitlist.share', 'Index.vue share copy');
 assertContains(indexPage, 'intafaced.waitlist.codeShape', 'Index.vue code shape copy');
 assertContains(registerPage, 'inviteCodeFromQuery', 'Register.vue reads ?code=');
 assertContains(registerPage, 'applyRouteCode', 'Register.vue applies the route code');
+assertContains(registerPage, '"$route.query.code"', 'Register.vue refills the code when the query changes');
+assertContains(indexPage, '"$route.query.code"', 'Index.vue reads a code that arrives after mount');
 assertContains(registerPage, 'waitlistSharePath', 'Register.vue shows the share link');
+assertContains(lang, 'referral-queue switch', 'en.js names the referral-queue switch on the register tip');
 assertContains(lang, 'share:', 'en.js share copy');
 assertContains(lang, 'codeShape:', 'en.js code shape copy');
 if (!copy.waitlist || !copy.waitlist.share) throw new Error('en.js missing intafaced.waitlist.share');

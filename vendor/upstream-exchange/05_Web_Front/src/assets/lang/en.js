@@ -3337,7 +3337,7 @@ module.exports = {
         },
         reg: {
             referrer: 'Referrer (optional)',
-            referrerTip: 'Optional. An account UUID attributes the affiliate edge. A 12-character waitlist code joins that queue and does not attribute an affiliate. Leave blank to do neither. A failed affiliate attribute still creates the account. A waitlist code the queue refuses is shown here and does not create the account. When the waitlist switch itself is off, that refusal is shown and the account is still created.',
+            referrerTip: 'Optional. An account UUID attributes the affiliate edge. A 12-character waitlist code joins that queue and does not attribute an affiliate. Leave blank to do neither. A failed affiliate attribute still creates the account. A waitlist code the queue refuses (unknown, locked, or invalid) is shown here and does not create the account. When the waitlist switch or the referral-queue switch is off, that refusal is shown, the list is not written, the account is still created, and the success notice repeats that sentence.',
             referrerErr: 'Use an account UUID or a 12-character waitlist code, or leave blank.'
         },
         app: {

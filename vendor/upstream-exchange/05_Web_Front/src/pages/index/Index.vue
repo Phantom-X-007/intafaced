@@ -197,11 +197,8 @@ function sortDecimals(a, b, type) {
 
 /** Named sentence for a waitlist refuse. The service message stays verbatim on IxState. */
 function waitlistNoticeText(self, message) {
-  var kind = waitlistDrop.classifyWaitlistRefuse(message);
-  if (kind === "unbuilt") return self.$t("intafaced.drop.unbuilt");
-  if (kind === "referral_off") return self.$t("intafaced.drop.referralOff");
-  if (kind === "waitlist_off") return self.$t("intafaced.drop.waitlistOff");
-  return "";
+  var key = waitlistDrop.waitlistRefuseCopyKey(waitlistDrop.classifyWaitlistRefuse(message));
+  return key ? self.$t(key) : "";
 }
 
 function applyWaitlistRefuse(self, target, res) {
@@ -697,6 +694,9 @@ export default {
   watch: {
     lang: function() {
       this.updateLangData();
+    },
+    "$route.query.code": function() {
+      this.applyWaitlistInvite();
     }
   },
   mounted: function() {
