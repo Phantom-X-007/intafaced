@@ -18,8 +18,9 @@
         <router-link v-if="isPayRoute || isP2PRoute" to="/bank" class="money-os-chip">Bank</router-link>
         <router-link v-if="isP2PRoute" to="/pay" class="money-os-chip">Pay</router-link>
         <router-link to="/exchange" class="money-os-chip">Desk</router-link>
-        <router-link v-if="!isLogin" to="/login" class="money-os-account">Log in</router-link>
-        <router-link v-else to="/uc/money" class="money-os-account">{{ member.username || 'Account' }}</router-link>
+        <!-- Auth routes are the door. A Log in chip there only points at the page you are already on. -->
+        <router-link v-if="isLogin" to="/uc/money" class="money-os-account">{{ member.username || 'Account' }}</router-link>
+        <router-link v-else-if="!isAuthRoute" to="/login" class="money-os-account">Log in</router-link>
       </header>
       <header v-else-if="isMarketingRoute" key="marketing-os-header" class="marketing-os-header">
         <router-link to="/" class="marketing-os-brand">INTAFACED</router-link>
