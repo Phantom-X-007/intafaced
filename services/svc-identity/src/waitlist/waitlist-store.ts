@@ -21,9 +21,40 @@ export type WaitlistEntry = {
 
 export type WaitlistEnrollResult = {
   readonly entry: WaitlistEntry;
-  /** false = same email already on the list; row unchanged. */
+  /**
+   * false = this email was already on the list. Position does not move.
+   * A referral may still be attached on that call when the row had none.
+   */
   readonly created: boolean;
 };
+
+/**
+ * What a repeat enroll does with a referral code.
+ *
+ * Returning the existing row and ignoring the code is a silent queue: the
+ * caller thinks the code was accepted. Own-code is not an attribution (the
+ * row already is that code). A different code on a row that already has one
+ * refuses. A code on a row that has none attaches once.
+ */
+export function lateReferralDecision(
+  existing: { readonly referralCode: string; readonly referredBy: string | null },
+  referredBy: string | null,
+):
+  | { readonly kind: 'return' }
+  | { readonly kind: 'attach' }
+  | { readonly kind: 'refuse'; readonly code: 'waitlist.referral_locked'; readonly message: string } {
+  if (!referredBy) return { kind: 'return' };
+  if (referredBy === existing.referralCode) return { kind: 'return' };
+  if (existing.referredBy === referredBy) return { kind: 'return' };
+  if (existing.referredBy) {
+    return {
+      kind: 'refuse',
+      code: 'waitlist.referral_locked',
+      message: 'This email already has a referral code',
+    };
+  }
+  return { kind: 'attach' };
+}
 
 export interface WaitlistStore {
   enroll(input: { email: string; referredBy?: string | null }): Promise<WaitlistEnrollResult>;
@@ -36,7 +67,7 @@ export interface WaitlistStore {
 export class WaitlistStoreError extends Error {
   constructor(
     message: string,
-    readonly code: 'waitlist.invalid' | 'waitlist.unknown_referrer' | 'waitlist.self_referral',
+    readonly code: 'waitlist.invalid' | 'waitlist.unknown_referrer' | 'waitlist.self_referral' | 'waitlist.referral_locked',
   ) {
     super(message);
     this.name = 'WaitlistStoreError';
@@ -93,10 +124,10 @@ export class MemoryWaitlistStore implements WaitlistStore {
 
   async enroll(input: { email: string; referredBy?: string | null }): Promise<WaitlistEnrollResult> {
     const email = normalizeWaitlistEmail(input.email);
-    const existing = this.byEmail.get(email);
-    if (existing) return { entry: existing, created: false };
-
     const referredBy = input.referredBy ? normalizeReferralCode(input.referredBy) : null;
+    const existing = this.byEmail.get(email);
+    if (existing) return this.attachIfOpen(existing, referredBy);
+
     if (referredBy) {
       const referrer = this.byCode.get(referredBy);
       if (!referrer) throw new WaitlistStoreError('Referral code is not on the waitlist', 'waitlist.unknown_referrer');
@@ -132,6 +163,27 @@ export class MemoryWaitlistStore implements WaitlistStore {
     return { entry, created: true };
   }
 
+  /** Repeat enroll. A new code on an unattributed row attaches once. */
+  private attachIfOpen(existing: WaitlistEntry, referredBy: string | null): WaitlistEnrollResult {
+    const decision = lateReferralDecision(existing, referredBy);
+    if (decision.kind === 'return') return { entry: existing, created: false };
+    if (decision.kind === 'refuse') throw new WaitlistStoreError(decision.message, decision.code);
+    const code = referredBy;
+    if (!code) return { entry: existing, created: false };
+    const referrer = this.byCode.get(code);
+    if (!referrer) throw new WaitlistStoreError('Referral code is not on the waitlist', 'waitlist.unknown_referrer');
+    if (referrer.email === existing.email) {
+      throw new WaitlistStoreError('Self-referral is refused', 'waitlist.self_referral');
+    }
+    const updated: WaitlistEntry = { ...existing, referredBy: code };
+    this.byEmail.set(existing.email, updated);
+    this.byCode.set(existing.referralCode, updated);
+    const bumped: WaitlistEntry = { ...referrer, referredCount: referrer.referredCount + 1 };
+    this.byCode.set(referrer.referralCode, bumped);
+    this.byEmail.set(referrer.email, bumped);
+    return { entry: updated, created: false };
+  }
+
   async getByCode(referralCode: string): Promise<WaitlistEntry | null> {
     return this.byCode.get(normalizeReferralCode(referralCode)) ?? null;
   }
@@ -160,13 +212,54 @@ export class SqlWaitlistStore implements WaitlistStore {
     const referredBy = input.referredBy ? normalizeReferralCode(input.referredBy) : null;
 
     return transaction(this.sql, async (tx) => {
+      const settleExisting = async (row: Parameters<typeof toEntry>[0]): Promise<WaitlistEnrollResult> => {
+        const entry = toEntry(row);
+        const decision = lateReferralDecision(entry, referredBy);
+        if (decision.kind === 'return') return { entry, created: false };
+        if (decision.kind === 'refuse') throw new WaitlistStoreError(decision.message, decision.code);
+        const code = referredBy;
+        if (!code) return { entry, created: false };
+        const referrer = await tx<Array<{ email: string }>>`
+          SELECT email FROM waitlist_entries WHERE referral_code = ${code} LIMIT 1
+        `;
+        if (!referrer[0]) {
+          throw new WaitlistStoreError('Referral code is not on the waitlist', 'waitlist.unknown_referrer');
+        }
+        if (referrer[0].email.toLowerCase() === email) {
+          throw new WaitlistStoreError('Self-referral is refused', 'waitlist.self_referral');
+        }
+        const updated = await tx<Array<Parameters<typeof toEntry>[0]>>`
+          UPDATE waitlist_entries
+          SET referred_by = ${code}
+          WHERE email = ${email} AND referred_by IS NULL
+          RETURNING id, email, referral_code, referred_by, position, referred_count, created_at
+        `;
+        if (!updated[0]) {
+          const again = await tx<Array<Parameters<typeof toEntry>[0]>>`
+            SELECT id, email, referral_code, referred_by, position, referred_count, created_at
+            FROM waitlist_entries
+            WHERE email = ${email}
+            LIMIT 1
+          `;
+          const current = again[0] ? toEntry(again[0]) : entry;
+          if (current.referredBy === code) return { entry: current, created: false };
+          throw new WaitlistStoreError('This email already has a referral code', 'waitlist.referral_locked');
+        }
+        await tx`
+          UPDATE waitlist_entries
+          SET referred_count = referred_count + 1
+          WHERE referral_code = ${code}
+        `;
+        return { entry: toEntry(updated[0]), created: false };
+      };
+
       const existing = await tx<Array<Parameters<typeof toEntry>[0]>>`
         SELECT id, email, referral_code, referred_by, position, referred_count, created_at
         FROM waitlist_entries
         WHERE email = ${email}
         LIMIT 1
       `;
-      if (existing[0]) return { entry: toEntry(existing[0]), created: false };
+      if (existing[0]) return settleExisting(existing[0]);
 
       if (referredBy) {
         const referrer = await tx<Array<{ email: string }>>`
@@ -199,7 +292,7 @@ export class SqlWaitlistStore implements WaitlistStore {
             WHERE email = ${email}
             LIMIT 1
           `;
-          if (raced[0]) return { entry: toEntry(raced[0]), created: false };
+          if (raced[0]) return settleExisting(raced[0]);
           // Unique on referral_code — retry a new code.
         }
       }

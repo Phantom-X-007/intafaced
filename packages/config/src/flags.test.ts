@@ -205,6 +205,37 @@ describe('assertEnabled — waitlist / referral refuse wrong phase', () => {
     ).toThrow(FlagDisabledError);
   });
 
+  it('treats a blank compose env as unset, so drop 0 opens waitlist and referral', () => {
+    for (const blank of ['', '   ', '\n']) {
+      const waitlist = {
+        drop: '0' as const,
+        env: { INTAFACED_FLAG_WAITLIST_ENABLED: blank, INTAFACED_FLAG_REFERRAL_QUEUE: blank },
+      };
+      expect(isEnabled('waitlist.enabled', waitlist)).toBe(true);
+      expect(isEnabled('referral.queue', waitlist)).toBe(true);
+      expect(explain('waitlist.enabled', waitlist).source).toBe('drop');
+      expect(offReadiness('waitlist.enabled', waitlist)).toBeNull();
+      expect(() => assertEnabled('waitlist.enabled', waitlist)).not.toThrow();
+      expect(() => assertEnabled('referral.queue', waitlist)).not.toThrow();
+    }
+  });
+
+  it('still pins waitlist off on an explicit off token, including surrounding space', () => {
+    for (const token of ['off', 'OFF', 'false', '0', 'no', '  off  ']) {
+      const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_WAITLIST_ENABLED: token } };
+      expect(isEnabled('waitlist.enabled', ctx)).toBe(false);
+      expect(explain('waitlist.enabled', ctx).source).toBe('env');
+      expect(offReadiness('waitlist.enabled', ctx)).toBe('overridden');
+      expect(() => assertEnabled('waitlist.enabled', ctx)).toThrow(FlagDisabledError);
+    }
+  });
+
+  it('fails closed when the pin token cannot be read', () => {
+    const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_WAITLIST_ENABLED: 'maybe' } };
+    expect(isEnabled('waitlist.enabled', ctx)).toBe(false);
+    expect(explain('waitlist.enabled', ctx).source).toBe('env');
+  });
+
   it('refuses a later-phase flag before its drop (wrong phase)', () => {
     // bank.cardWaitlist is drop II — at Tease it must not capture.
     expect(() => assertEnabled('bank.cardWaitlist', { drop: '0' })).toThrow(FlagDisabledError);

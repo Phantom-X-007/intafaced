@@ -58,9 +58,16 @@ if (!available) {
       expect(again.created).toBe(false);
       expect(again.entry.id).toBe(a.entry.id);
 
+      const late = await store.enroll({ email: 'late@example.com' });
+      const attached = await store.enroll({ email: 'late@example.com', referredBy: a.entry.referralCode });
+      expect(attached.created).toBe(false);
+      expect(attached.entry.referredBy).toBe(a.entry.referralCode);
+      expect(attached.entry.position).toBe(late.entry.position);
+      expect((await store.getByCode(a.entry.referralCode))?.referredCount).toBe(2);
+
       const listed = await store.list({ limit: 10, offset: 0 });
-      expect(listed.total).toBe(2);
-      expect((await store.getByCode(a.entry.referralCode))?.referredCount).toBe(1);
+      expect(listed.total).toBe(3);
+      expect((await store.getByCode(a.entry.referralCode))?.referredCount).toBe(2);
     });
 
     it('refuses an unknown referrer without inserting', async () => {

@@ -12,6 +12,36 @@ function openService(): WaitlistService {
 }
 
 describe('WaitlistService — flag refuse-close', () => {
+  it('enrolls when the compose pin is blank — an empty string is not off', async () => {
+    const svc = new WaitlistService(new MemoryWaitlistStore(), {
+      drop: '0',
+      env: {
+        INTAFACED_FLAG_WAITLIST_ENABLED: '',
+        INTAFACED_FLAG_REFERRAL_QUEUE: '   ',
+      },
+    });
+    const first = await svc.enroll({ email: 'ada@example.com' });
+    const second = await svc.enroll({ email: 'bob@example.com', referralCode: first.entry.referralCode });
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(true);
+    expect(second.entry.referredBy).toBe(first.entry.referralCode);
+    const place = await svc.position(first.entry.referralCode);
+    expect(place.position).toBe(1);
+    expect(place.referredCount).toBe(1);
+    expect(place.queueLength).toBe(2);
+  });
+
+  it('refuses when the pin is the word off, and names the env source', async () => {
+    const svc = new WaitlistService(new MemoryWaitlistStore(), {
+      drop: '0',
+      env: { INTAFACED_FLAG_WAITLIST_ENABLED: 'off' },
+    });
+    await expect(svc.enroll({ email: 'ada@example.com' })).rejects.toMatchObject({
+      code: 'flag.waitlist.enabled.disabled',
+      source: 'env',
+    });
+  });
+
   it('enrolls at drop 0 when both flags follow the clock', async () => {
     const svc = openService();
     const out = await svc.enroll({ email: 'ada@example.com' });
@@ -82,6 +112,40 @@ describe('WaitlistService — queue + referral attribution', () => {
     expect(again.created).toBe(false);
     expect(again.entry.referralCode).toBe(a.entry.referralCode);
     expect(again.entry.position).toBe(1);
+  });
+
+  it('attaches a referral on a later enroll when the row had none', async () => {
+    const svc = openService();
+    const ref = await svc.enroll({ email: 'ref@example.com' });
+    const first = await svc.enroll({ email: 'ada@example.com' });
+    const again = await svc.enroll({ email: 'ada@example.com', referralCode: ref.entry.referralCode });
+    expect(again.created).toBe(false);
+    expect(again.entry.position).toBe(first.entry.position);
+    expect(again.entry.referredBy).toBe(ref.entry.referralCode);
+    const place = await svc.position(ref.entry.referralCode);
+    expect(place.referredCount).toBe(1);
+  });
+
+  it('refuses a second, different referral code instead of dropping it', async () => {
+    const svc = openService();
+    const ref = await svc.enroll({ email: 'ref@example.com' });
+    const other = await svc.enroll({ email: 'other@example.com' });
+    await svc.enroll({ email: 'ada@example.com', referralCode: ref.entry.referralCode });
+    await expect(svc.enroll({ email: 'ada@example.com', referralCode: other.entry.referralCode })).rejects.toMatchObject({
+      code: 'waitlist.referral_locked',
+    });
+    expect((await svc.position(ref.entry.referralCode)).referredCount).toBe(1);
+    expect((await svc.position(other.entry.referralCode)).referredCount).toBe(0);
+  });
+
+  it('refuses an unknown code on a repeat enroll — the row stays and the code is not dropped', async () => {
+    const store = new MemoryWaitlistStore();
+    const svc = new WaitlistService(store, flags());
+    await svc.enroll({ email: 'ada@example.com' });
+    await expect(svc.enroll({ email: 'ada@example.com', referralCode: 'bbbbbbbbbbbb' })).rejects.toMatchObject({
+      code: 'waitlist.unknown_referrer',
+    });
+    expect((await store.getByEmail('ada@example.com'))?.referredBy).toBeNull();
   });
 
   it('records a referral without inventing a reward or moving position', async () => {

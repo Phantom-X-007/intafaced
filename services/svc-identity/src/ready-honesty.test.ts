@@ -157,8 +157,26 @@ describe('identity /ready honesty — registration / waitlist env pins', () => {
     expect(flagEnvPin('yes')).toBe(true);
     expect(flagEnvPin('ON')).toBe(true);
     expect(flagEnvPin('off')).toBe(false);
-    expect(flagEnvPin('')).toBe(false);
+    expect(flagEnvPin('')).toBeNull();
+    expect(flagEnvPin('   ')).toBeNull();
     expect(flagEnvPin('0')).toBe(false);
+    expect(flagEnvPin('false')).toBe(false);
+    expect(flagEnvPin('no')).toBe(false);
+    expect(flagEnvPin('maybe')).toBe(false);
+  });
+
+  it('a blank compose pin is not reported as waitlist off', () => {
+    const body = identityReadyHonesty({
+      kycDocKey: '',
+      ledgerUrl: undefined,
+      registrationOpen: true,
+      waitlistEnabled: '',
+      referralQueue: '   ',
+      launchDrop: '0',
+    });
+    expect(body.waitlistEnabled).toBeNull();
+    expect(body.referralQueue).toBeNull();
+    expect(body.launchDrop).toBe('0');
   });
 
   it('registrationOpen closed is named while ready stays true', () => {

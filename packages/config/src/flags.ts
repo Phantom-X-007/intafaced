@@ -368,11 +368,31 @@ export function envVarNameFor(key: string): string {
   return `INTAFACED_FLAG_${key.replace(/[.-]/g, '_').toUpperCase()}`;
 }
 
+const ENV_ON = new Set(['1', 'true', 'on', 'yes']);
+const ENV_OFF = new Set(['0', 'false', 'off', 'no']);
+
+/**
+ * Read one `INTAFACED_FLAG_*` value.
+ *
+ * `undefined` means no pin: the drop clock decides. Compose writes `${VAR:-}`
+ * as an empty string when the host did not pin, so blank is the same as unset.
+ * Reading blank as off pinned drop-0 waitlist closed on every stock deploy,
+ * and the shell then called that refuse "never built".
+ *
+ * A token this function cannot read (`maybe`, `enabled`) is `false`. Fail
+ * closed. Only the on-list opens a flag the clock would have left shut.
+ */
+export function parseFlagEnv(raw: string | undefined | null): boolean | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const token = raw.trim().toLowerCase();
+  if (token === '') return undefined;
+  if (ENV_ON.has(token)) return true;
+  if (ENV_OFF.has(token)) return false;
+  return false;
+}
+
 function envOverride(key: string, env: Record<string, string | undefined>): boolean | undefined {
-  const name = envVarNameFor(key);
-  const raw = env[name];
-  if (raw === undefined) return undefined;
-  return ['1', 'true', 'on', 'yes'].includes(raw.toLowerCase());
+  return parseFlagEnv(env[envVarNameFor(key)]);
 }
 
 export class UnknownFlagError extends Error {
@@ -586,8 +606,9 @@ export function isCapabilityBuilt(key: string): boolean {
  *   - `killed`       — module kill-switch
  *   - `phase-gated`  — drop:null, never opens by clock alone
  *
- * Waitlist / referral (`WAITLIST_REFERRAL_FLAGS`) stay `unbuilt` while OFF.
- * `null` here would mean ON — never treat OFF as ready.
+ * Waitlist / referral (`WAITLIST_REFERRAL_FLAGS`) are built request-path gates.
+ * OFF via env or override is `overridden`, never `unbuilt`. `null` means ON.
+ * Never treat OFF as ready, and never call a built gate unbuilt because it is off.
  */
 export type OffReadiness = 'unbuilt' | 'drop-pending' | 'overridden' | 'killed' | 'phase-gated';
 

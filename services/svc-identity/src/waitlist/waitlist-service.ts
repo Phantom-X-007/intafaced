@@ -18,7 +18,13 @@ import { WaitlistStoreError, type WaitlistEnrollResult, type WaitlistEntry, type
 export class WaitlistError extends Error {
   constructor(
     message: string,
-    readonly code: 'waitlist.unbuilt' | 'waitlist.invalid' | 'waitlist.unknown_referrer' | 'waitlist.self_referral' | 'waitlist.not_found',
+    readonly code:
+      | 'waitlist.unbuilt'
+      | 'waitlist.invalid'
+      | 'waitlist.unknown_referrer'
+      | 'waitlist.self_referral'
+      | 'waitlist.not_found'
+      | 'waitlist.referral_locked',
   ) {
     super(message);
     this.name = 'WaitlistError';
@@ -46,6 +52,8 @@ export class WaitlistService {
   /**
    * Public enroll. `referralCode` requires `referral.queue` as well as
    * `waitlist.enabled` — a code must not be silently discarded.
+   * A repeat enroll with a code attaches it when the row has none, and
+   * refuses when the row already has a different one.
    */
   async enroll(input: { email: string; referralCode?: string }): Promise<WaitlistEnrollResult> {
     this.assertWaitlist();
