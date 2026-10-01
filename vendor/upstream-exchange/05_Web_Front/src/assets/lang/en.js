@@ -222,7 +222,12 @@ module.exports = {
             referredCount: "Referred",
             queueLength: "Queue",
             joined: "You are on the list.",
-            already: "This email is already on the list. The position is unchanged."
+            already: "This email is already on the list. The position is unchanged.",
+            share: "Give this link to the next person. Opening it fills their referral code.",
+            codeShape: "A waitlist code is 12 hex characters. An account UUID goes on the register form.",
+            affiliateOnRegister: "That code is an account UUID. Apply it on the register form.",
+            openRegister: "Open register",
+            referralOnRow: "Referral"
         },
         drop: {
             unbuilt: "This drop is not open. The waitlist service is not wired on this deployment.",
@@ -3332,7 +3337,7 @@ module.exports = {
         },
         reg: {
             referrer: 'Referrer (optional)',
-            referrerTip: 'Optional. An account UUID attributes the affiliate edge. A 12-character waitlist code joins that queue and does not attribute an affiliate. Leave blank to do neither. A failed affiliate attribute still creates the account. A waitlist code the queue refuses is shown here and does not create the account.',
+            referrerTip: 'Optional. An account UUID attributes the affiliate edge. A 12-character waitlist code joins that queue and does not attribute an affiliate. Leave blank to do neither. A failed affiliate attribute still creates the account. A waitlist code the queue refuses is shown here and does not create the account. When the waitlist switch itself is off, that refusal is shown and the account is still created.',
             referrerErr: 'Use an account UUID or a 12-character waitlist code, or leave blank.'
         },
         app: {

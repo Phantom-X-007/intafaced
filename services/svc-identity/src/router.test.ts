@@ -1784,6 +1784,25 @@ describe('waitlist door — unbuilt / flag / operator', () => {
     expect(out.created).toBe(true);
     expect(out.position).toBe(1);
     expect(out.referralCode).toMatch(/^[a-f0-9]{12}$/);
+    expect(out.referredBy).toBeNull();
+  });
+
+  it('attaches a referral on a later enroll and refuses a different one', async () => {
+    const { api } = waitlistRouter();
+    const caller = api.createCaller(await ctx([]));
+    const ref = await caller.waitlist.enroll({ email: 'ref@example.com' });
+    const other = await caller.waitlist.enroll({ email: 'other@example.com' });
+    const first = await caller.waitlist.enroll({ email: 'ada@example.com' });
+    const attached = await caller.waitlist.enroll({ email: 'ada@example.com', referralCode: ref.referralCode });
+    expect(attached.created).toBe(false);
+    expect(attached.position).toBe(first.position);
+    expect(attached.referredBy).toBe(ref.referralCode);
+    const err = await caller
+      .waitlist.enroll({ email: 'ada@example.com', referralCode: other.referralCode })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('CONFLICT');
+    expect(String((err as { message?: string }).message)).toContain('[waitlist.referral_locked]');
+    expect(String((err as { message?: string }).message)).toContain('already has a referral code');
   });
 
   it('refuses enroll when waitlist.enabled is off — no silent capture', async () => {

@@ -35,7 +35,38 @@ function waitlistRefuseReason(kind) {
   return null;
 }
 
+var WAITLIST_CODE_RE = /^[a-fA-F0-9]{12}$/;
+var ACCOUNT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * `?code=` on /reg is forwarded to /register. A 12-hex value is a waitlist
+ * code. A UUID is an affiliate account id. Anything else is left unused.
+ */
+function inviteCodeFromQuery(raw) {
+  if (Array.isArray(raw)) raw = raw[0];
+  if (raw == null) return null;
+  var text = String(raw).trim();
+  if (WAITLIST_CODE_RE.test(text)) return { kind: 'waitlist', value: text.toLowerCase() };
+  if (ACCOUNT_UUID_RE.test(text)) return { kind: 'affiliate', value: text };
+  return null;
+}
+
+function isWaitlistCode(raw) {
+  var parsed = inviteCodeFromQuery(raw);
+  return !!(parsed && parsed.kind === 'waitlist');
+}
+
+/** Path that fills the register referrer field with this waitlist code. */
+function waitlistSharePath(code) {
+  var parsed = inviteCodeFromQuery(code);
+  if (!parsed || parsed.kind !== 'waitlist') return '';
+  return '/register?code=' + parsed.value;
+}
+
 module.exports = {
   classifyWaitlistRefuse: classifyWaitlistRefuse,
   waitlistRefuseReason: waitlistRefuseReason,
+  inviteCodeFromQuery: inviteCodeFromQuery,
+  isWaitlistCode: isWaitlistCode,
+  waitlistSharePath: waitlistSharePath,
 };

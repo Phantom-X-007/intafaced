@@ -39,6 +39,13 @@
           {{ waitlistAction.data.created ? $t('intafaced.waitlist.joined') : $t('intafaced.waitlist.already') }}
           {{ $t('intafaced.waitlist.position') }} <code>{{ waitlistAction.data.position }}</code>
           · {{ $t('intafaced.waitlist.yourCode') }} <code>{{ waitlistAction.data.referralCode }}</code>
+          <template v-if="waitlistAction.data.referredBy">
+            · {{ $t('intafaced.waitlist.referralOnRow') }} <code>{{ waitlistAction.data.referredBy }}</code>
+          </template>
+          <template v-if="waitlistSharePath">
+            {{ $t('intafaced.waitlist.share') }}
+            <router-link :to="waitlistSharePath"><code>{{ waitlistSharePath }}</code></router-link>
+          </template>
         </p>
         <p v-if="registerError" class="ix-login-error" role="alert" aria-live="polite">{{ registerError }}</p>
         <IxState
@@ -341,6 +348,11 @@ export default {
     },
     waitlistNotice: function() {
       return waitlistNoticeText(this, this.waitlistAction.message);
+    },
+    waitlistSharePath: function() {
+      var data = this.waitlistAction.data;
+      if (!data || !data.referralCode) return "";
+      return waitlistDrop.waitlistSharePath(data.referralCode);
     }
   },
   created: function() {
@@ -351,9 +363,16 @@ export default {
     init() {
       this.$store.commit("navigate", "nav-other");
       this.$store.state.HeaderActiveName = "0";
+      this.applyRouteCode();
       if (this.isLogin) {
         this.$router.push("/");
       }
+    },
+    applyRouteCode() {
+      var raw = this.$route && this.$route.query ? this.$route.query.code : "";
+      var invite = waitlistDrop.inviteCodeFromQuery(raw);
+      if (!invite) return;
+      if (!this.formInline.referrerId) this.formInline.referrerId = invite.value;
     },
     finishRegister(input) {
       var self = this;
@@ -379,6 +398,7 @@ export default {
         var desc = self.$t("uc.regist.success");
         var joined = self.waitlistAction.data;
         if (joined && joined.referralCode) {
+          var share = waitlistDrop.waitlistSharePath(joined.referralCode);
           desc =
             desc +
             " " +
@@ -392,6 +412,7 @@ export default {
             " " +
             joined.referralCode +
             ".";
+          if (share) desc = desc + " " + self.$t("intafaced.waitlist.share") + " " + share;
         }
         self.$Notice.success({
           title: self.$t("common.tip"),

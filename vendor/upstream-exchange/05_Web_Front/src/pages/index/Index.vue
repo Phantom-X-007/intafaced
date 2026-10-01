@@ -35,17 +35,22 @@
 
     <section class="home-access" aria-labelledby="home-access-title">
       <div><p class="home-section-label">WHAT COMES NEXT</p><h2 id="home-access-title">Stay in the loop.</h2><p>Register your interest in the next release.</p></div>
-      <details class="home-access-details"><summary>Join the waitlist <span aria-hidden="true">+</span></summary><div class="home-access-forms">
+      <details ref="waitlistDetails" class="home-access-details"><summary>Join the waitlist <span aria-hidden="true">+</span></summary><div class="home-access-forms">
         <div class="ix-waitlist-card">
           <h2>{{ $t('intafaced.waitlist.title') }}</h2>
           <p>{{ $t('intafaced.waitlist.lead') }}</p>
+          <p v-if="waitlistAffiliateLink" class="ix-waitlist-unbuilt" role="note">
+            {{ $t('intafaced.waitlist.affiliateOnRegister') }}
+            <router-link :to="waitlistAffiliateLink">{{ $t('intafaced.waitlist.openRegister') }}</router-link>
+          </p>
           <form @submit.prevent="enrollWaitlist">
             <input v-model.trim="waitlistEmail" type="email" required :placeholder="$t('intafaced.waitlist.email')" :aria-label="$t('intafaced.waitlist.email')">
             <input v-model.trim="waitlistReferralCode" :placeholder="$t('intafaced.waitlist.referralCode')" :aria-label="$t('intafaced.waitlist.referralCode')">
             <button type="submit">{{ $t('intafaced.waitlist.enroll') }}</button>
           </form>
+          <p v-if="waitlistFieldError" class="ix-waitlist-unbuilt" role="alert">{{ waitlistFieldError }}</p>
           <p v-if="waitlistNotice" class="ix-waitlist-unbuilt" role="alert">{{ waitlistNotice }}</p>
-          <IxState compact
+          <IxState
             :loading="waitlistAction.busy"
             :reason="waitlistAction.ran ? waitlistAction.reason : null"
             :message="waitlistAction.message"
@@ -55,13 +60,20 @@
               {{ waitlistResult.created ? $t('intafaced.waitlist.joined') : $t('intafaced.waitlist.already') }}
               {{ $t('intafaced.waitlist.position') }}: <code>{{ waitlistResult.position }}</code>
               · {{ $t('intafaced.waitlist.yourCode') }}: <code>{{ waitlistResult.referralCode }}</code>
+              <template v-if="waitlistResult.referredBy">
+                · {{ $t('intafaced.waitlist.referralOnRow') }}: <code>{{ waitlistResult.referredBy }}</code>
+              </template>
               · {{ $t('intafaced.waitlist.referredCount') }}: <code>{{ waitlistResult.referredCount }}</code>
+            </p>
+            <p v-if="waitlistSharePath" class="ix-waitlist-result">
+              {{ $t('intafaced.waitlist.share') }}
+              <router-link :to="waitlistSharePath"><code>{{ waitlistSharePath }}</code></router-link>
             </p>
           </IxState>
           <div class="ix-waitlist-position">
             <input v-model.trim="waitlistLookupCode" :placeholder="$t('intafaced.waitlist.lookupCode')" :aria-label="$t('intafaced.waitlist.lookupCode')">
             <button type="button" @click="lookupWaitlistPosition">{{ $t('intafaced.waitlist.lookup') }}</button>
-            <IxState compact
+            <IxState
               :loading="waitlistPosition.loading"
               :reason="waitlistPosition.reason"
               :message="waitlistPosition.message"
@@ -615,6 +627,8 @@ export default {
       waitlistEmail: "",
       waitlistReferralCode: "",
       waitlistLookupCode: "",
+      waitlistFieldError: "",
+      waitlistAffiliateLink: "",
       waitlistAction: this.emptyAction(),
       waitlistPosition: { loading: false, reason: null, message: "", data: null },
       kycTier: "basic",
@@ -632,6 +646,11 @@ export default {
     },
     waitlistNotice: function() {
       return waitlistNoticeText(this, this.waitlistAction.message) || waitlistNoticeText(this, this.waitlistPosition.message);
+    },
+    waitlistSharePath: function() {
+      var data = this.waitlistResult;
+      if (!data || !data.referralCode) return "";
+      return waitlistDrop.waitlistSharePath(data.referralCode);
     },
     kycPendingRows: function() {
       var data = this.kycStatus.data;
@@ -683,12 +702,30 @@ export default {
   mounted: function() {
     this.loadFavorites();
     this.getSymbol();
+    this.applyWaitlistInvite();
   },
   methods: {
+    applyWaitlistInvite() {
+      var raw = this.$route && this.$route.query ? this.$route.query.code : "";
+      var invite = waitlistDrop.inviteCodeFromQuery(raw);
+      if (!invite) return;
+      if (invite.kind === "waitlist") {
+        this.waitlistReferralCode = invite.value;
+      } else {
+        this.waitlistAffiliateLink = "/register?code=" + encodeURIComponent(invite.value);
+      }
+      if (this.$refs.waitlistDetails) this.$refs.waitlistDetails.open = true;
+    },
     enrollWaitlist() {
       var self = this;
+      this.waitlistFieldError = "";
+      var code = (this.waitlistReferralCode || "").trim();
+      if (code && !waitlistDrop.isWaitlistCode(code)) {
+        this.waitlistFieldError = this.$t("intafaced.waitlist.codeShape");
+        return;
+      }
       var input = { email: this.waitlistEmail };
-      if (this.waitlistReferralCode) input.referralCode = this.waitlistReferralCode;
+      if (code) input.referralCode = code.toLowerCase();
       this.act("waitlistAction", mutate("identity", "waitlist.enroll", input, this.ixToken)).then(function (res) {
         if (!res.ok) applyWaitlistRefuse(self, self.waitlistAction, res);
       });

@@ -218,6 +218,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'waitlist.unknown_referrer':
         return new TRPCError({ code: 'NOT_FOUND', message: `${err.message} [${err.code}]`, cause: err });
       case 'waitlist.self_referral':
+      case 'waitlist.referral_locked':
         return new TRPCError({ code: 'CONFLICT', message: `${err.message} [${err.code}]`, cause: err });
       case 'waitlist.invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
@@ -2191,6 +2192,7 @@ export function createIdentityRouter(
             email: z.string(),
             position: z.number().int().positive(),
             referralCode: z.string(),
+            referredBy: z.string().nullable(),
             referredCount: z.number().int().min(0),
             created: z.boolean(),
           }),
@@ -2203,6 +2205,7 @@ export function createIdentityRouter(
               email: out.entry.email,
               position: out.entry.position,
               referralCode: out.entry.referralCode,
+              referredBy: out.entry.referredBy,
               referredCount: out.entry.referredCount,
               created: out.created,
             };

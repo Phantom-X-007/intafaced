@@ -120,4 +120,34 @@ if (String(copy.drop.unbuilt).indexOf('not wired') === -1) {
   throw new Error('unbuilt must say the service is not wired');
 }
 
+var hex = drop.inviteCodeFromQuery('AbCDef012345');
+if (!hex || hex.kind !== 'waitlist' || hex.value !== 'abcdef012345') {
+  throw new Error('a 12-hex query code must become a lowercase waitlist code');
+}
+var uuid = drop.inviteCodeFromQuery('11111111-1111-4111-8111-111111111111');
+if (!uuid || uuid.kind !== 'affiliate') throw new Error('a UUID query code is an affiliate id');
+if (drop.inviteCodeFromQuery('not-a-code') !== null) throw new Error('junk query code must stay unused');
+if (drop.inviteCodeFromQuery('') !== null) throw new Error('blank query code must stay unused');
+if (drop.inviteCodeFromQuery(['AbCDef012345']) === null) throw new Error('array query code must be read');
+if (!drop.isWaitlistCode('abcdef012345')) throw new Error('isWaitlistCode accepts 12 hex');
+if (drop.isWaitlistCode('11111111-1111-4111-8111-111111111111')) {
+  throw new Error('an account UUID is not a waitlist code');
+}
+if (drop.waitlistSharePath('AbCDef012345') !== '/register?code=abcdef012345') {
+  throw new Error('share path must fill /register?code=');
+}
+if (drop.waitlistSharePath('not-a-code') !== '') throw new Error('a bad code has no share path');
+
+assertContains(indexPage, 'inviteCodeFromQuery', 'Index.vue reads ?code=');
+assertContains(indexPage, 'isWaitlistCode', 'Index.vue checks the code shape before enroll');
+assertContains(indexPage, 'waitlistSharePath', 'Index.vue shows the share link');
+assertContains(indexPage, 'intafaced.waitlist.share', 'Index.vue share copy');
+assertContains(indexPage, 'intafaced.waitlist.codeShape', 'Index.vue code shape copy');
+assertContains(registerPage, 'inviteCodeFromQuery', 'Register.vue reads ?code=');
+assertContains(registerPage, 'applyRouteCode', 'Register.vue applies the route code');
+assertContains(registerPage, 'waitlistSharePath', 'Register.vue shows the share link');
+assertContains(lang, 'share:', 'en.js share copy');
+assertContains(lang, 'codeShape:', 'en.js code shape copy');
+if (!copy.waitlist || !copy.waitlist.share) throw new Error('en.js missing intafaced.waitlist.share');
+
 console.log('waitlist-drop-flag.golden: ok');
