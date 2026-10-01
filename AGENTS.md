@@ -29,6 +29,20 @@ Build the product. Do not spend the session writing `docs/**` boards, ADRs, LIVE
 
 Repo law beats installed skills. Skills that say `git worktree add` or block ship on CI/verify are wrong here.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues on Phantom-X-007/intafaced. Use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical roles, each label equal to its name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Graphify
 
 First code-location move for `services/` / `packages/`: `graphify query "<symbol>" --budget 400`, then open the one `src=` file. Vue/`vendor/` is not in the map — grep it. After those edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` (official hook skips worktrees). Map is `graphify-out/graph.json` in git.
