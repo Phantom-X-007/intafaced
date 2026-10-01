@@ -1425,7 +1425,7 @@ export class P2pService {
         this.sql,
         async (tx) => {
           const trade = await this.lockTrade(tx, tradeId);
-          if (trade.buyerId !== actorId && trade.sellerId !== actorId) throw unknownTrade(trade.id);
+          if (trade.buyerId !== actorId && trade.sellerId !== actorId) throw unknownTrade(tradeId);
           if (trade.buyerId !== actorId) {
             throw new P2pError('Only the buyer can mark the fiat as sent', 'p2p.not_the_buyer');
           }
@@ -1455,7 +1455,7 @@ export class P2pService {
   async confirmFiatReceived(tradeId: string, actorId: string): Promise<TradeRecord> {
     return withMoneySpan('p2p.release', { operation: 'escrow.release', tradeId }, async () => {
       const trade = await this.getTrade(tradeId);
-      if (trade.buyerId !== actorId && trade.sellerId !== actorId) throw unknownTrade(trade.id);
+      if (trade.buyerId !== actorId && trade.sellerId !== actorId) throw unknownTrade(tradeId);
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
       }
@@ -1488,7 +1488,7 @@ export class P2pService {
   async cancelTrade(tradeId: string, actorId: string, reason = 'cancelled'): Promise<TradeRecord> {
     return withMoneySpan('p2p.cancel', { operation: 'escrow.refund', tradeId }, async () => {
       const current = await this.getTrade(tradeId);
-      if (current.sellerId !== actorId && current.buyerId !== actorId) throw unknownTrade(current.id);
+      if (current.sellerId !== actorId && current.buyerId !== actorId) throw unknownTrade(tradeId);
       if (current.status === 'fiat_sent' && current.sellerId !== actorId) {
         throw new P2pError('The buyer has declared the fiat sent — open a dispute rather than cancelling', 'p2p.not_the_seller');
       }
@@ -1571,7 +1571,7 @@ export class P2pService {
         const trade = await this.lockTrade(tx, input.tradeId);
 
         if (origin === 'party' && trade.sellerId !== input.openedBy && trade.buyerId !== input.openedBy) {
-          throw unknownTrade(trade.id);
+          throw unknownTrade(input.tradeId);
         }
         assertTransition(trade.status, 'disputed');
 
@@ -1661,7 +1661,7 @@ export class P2pService {
         this.sql,
         async (tx) => {
           const trade = await this.lockTrade(tx, input.tradeId);
-          if (trade.sellerId !== input.actorId && trade.buyerId !== input.actorId) throw unknownTrade(trade.id);
+          if (trade.sellerId !== input.actorId && trade.buyerId !== input.actorId) throw unknownTrade(input.tradeId);
 
           const rows = await tx<DisputeRow[]>`
             SELECT * FROM p2p.p2p_disputes WHERE trade_id = ${input.tradeId} FOR UPDATE
