@@ -262,11 +262,8 @@ const WAITLIST_CODE_RE = /^[a-fA-F0-9]{12}$/;
 const PASSWORD_MIN = 12;
 
 function waitlistNoticeText(self, message) {
-  var kind = waitlistDrop.classifyWaitlistRefuse(message);
-  if (kind === "unbuilt") return self.$t("intafaced.drop.unbuilt");
-  if (kind === "referral_off") return self.$t("intafaced.drop.referralOff");
-  if (kind === "waitlist_off") return self.$t("intafaced.drop.waitlistOff");
-  return "";
+  var key = waitlistDrop.waitlistRefuseCopyKey(waitlistDrop.classifyWaitlistRefuse(message));
+  return key ? self.$t(key) : "";
 }
 
 export default {
@@ -359,6 +356,11 @@ export default {
     window.scrollTo(0, 0);
     this.init();
   },
+  watch: {
+    "$route.query.code": function() {
+      this.applyRouteCode();
+    }
+  },
   methods: {
     init() {
       this.$store.commit("navigate", "nav-other");
@@ -414,6 +416,10 @@ export default {
             ".";
           if (share) desc = desc + " " + self.$t("intafaced.waitlist.share") + " " + share;
         }
+        // The page that showed the refuse is left on success. The notice is
+        // what is still on screen, so the list-not-written sentence has to ride along.
+        var aside = waitlistNoticeText(self, self.waitlistAction && self.waitlistAction.message);
+        if (aside) desc = desc + " " + aside;
         self.$Notice.success({
           title: self.$t("common.tip"),
           desc: desc

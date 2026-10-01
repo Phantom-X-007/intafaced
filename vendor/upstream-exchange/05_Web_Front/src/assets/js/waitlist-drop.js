@@ -35,6 +35,17 @@ function waitlistRefuseReason(kind) {
   return null;
 }
 
+/**
+ * Catalog key for the sentence a person can read. Empty when the message
+ * is not a drop refuse. Pages translate the key; they do not each keep a copy.
+ */
+function waitlistRefuseCopyKey(kind) {
+  if (kind === 'unbuilt') return 'intafaced.drop.unbuilt';
+  if (kind === 'referral_off') return 'intafaced.drop.referralOff';
+  if (kind === 'waitlist_off') return 'intafaced.drop.waitlistOff';
+  return '';
+}
+
 var WAITLIST_CODE_RE = /^[a-fA-F0-9]{12}$/;
 var ACCOUNT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -66,6 +77,7 @@ function waitlistSharePath(code) {
 module.exports = {
   classifyWaitlistRefuse: classifyWaitlistRefuse,
   waitlistRefuseReason: waitlistRefuseReason,
+  waitlistRefuseCopyKey: waitlistRefuseCopyKey,
   inviteCodeFromQuery: inviteCodeFromQuery,
   isWaitlistCode: isWaitlistCode,
   waitlistSharePath: waitlistSharePath,

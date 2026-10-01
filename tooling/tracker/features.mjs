@@ -306,7 +306,7 @@ export const FEATURES = [
     note:
       '**D26-P1-F1 Done 2026-08-21:** §11 drop switch (`drop-flags-mount-vs-tracker.ts`); assertEnabled + FlagDisabledError. ' +
       'offReadiness makes OFF plan rows read unbuilt not ready; waitlist+referral request-path enforced. ' +
-      'Waitlist/referral Vue callers named-unbuilt when flag off (Index + Register waitlist.enroll). Class X residual: founding-badge mint stays launch.nft chain.',
+      'Waitlist/referral Vue callers show flag_off when the switch is off (Index + Register waitlist.enroll); no_surface is only waitlist.unbuilt. A flag refuse still creates the account, and the register success notice repeats that the list was not written. Class X residual: founding-badge mint stays launch.nft chain.',
   }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
