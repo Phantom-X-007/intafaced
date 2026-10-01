@@ -689,7 +689,20 @@ describe('svc-p2p escrow', () => {
 
     it('lets nobody outside the trade cancel it', async () => {
       const trade = await escrowedTrade('100');
-      await expect(p2p.cancelTrade(trade.id, OTHER)).rejects.toMatchObject({ code: 'p2p.not_a_party' });
+      const missingId = '88888888-8888-4888-8888-888888888888';
+      const shape = async (id: string) => {
+        try {
+          await p2p.cancelTrade(id, OTHER);
+          return null;
+        } catch (e) {
+          const err = e as P2pError;
+          return { code: err.code, message: err.message.replaceAll(id, '<id>') };
+        }
+      };
+      const stranger = await shape(trade.id);
+      const missing = await shape(missingId);
+      expect(stranger).toEqual(missing);
+      expect(missing).toEqual({ code: 'p2p.trade_not_found', message: 'Trade <id> not found' });
       expect(await escrowOf(MAKER)).toBe('100');
     });
   });
@@ -843,9 +856,18 @@ describe('svc-p2p escrow', () => {
 
     it('lets only a party open a dispute', async () => {
       const trade = await escrowedTrade('100');
-      await expect(p2p.openDispute({ tradeId: trade.id, openedBy: OTHER, reason: 'nosy' })).rejects.toMatchObject({
-        code: 'p2p.not_a_party',
-      });
+      const missingId = '88888888-8888-4888-8888-888888888888';
+      const shape = async (id: string) => {
+        try {
+          await p2p.openDispute({ tradeId: id, openedBy: OTHER, reason: 'nosy' });
+          return null;
+        } catch (e) {
+          const err = e as P2pError;
+          return { code: err.code, message: err.message.replaceAll(id, '<id>') };
+        }
+      };
+      expect(await shape(trade.id)).toEqual(await shape(missingId));
+      expect(await shape(missingId)).toEqual({ code: 'p2p.trade_not_found', message: 'Trade <id> not found' });
     });
 
     it('persists a chat thread id on the dispute and the trade', async () => {
@@ -1109,9 +1131,18 @@ describe('svc-p2p escrow', () => {
 
     it('lets only a party append', async () => {
       const trade = await disputedTrade();
-      await expect(p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: OTHER, evidence: ['x'] })).rejects.toMatchObject({
-        code: 'p2p.not_a_party',
-      });
+      const missingId = '88888888-8888-4888-8888-888888888888';
+      const shape = async (id: string) => {
+        try {
+          await p2p.appendDisputeEvidence({ tradeId: id, actorId: OTHER, evidence: ['x'] });
+          return null;
+        } catch (e) {
+          const err = e as P2pError;
+          return { code: err.code, message: err.message.replaceAll(id, '<id>') };
+        }
+      };
+      expect(await shape(trade.id)).toEqual(await shape(missingId));
+      expect(await escrowOf(MAKER)).toBe('100');
     });
 
     it('refuses evidence once the dispute has been ruled on', async () => {
@@ -2534,6 +2565,24 @@ describe('svc-p2p escrow', () => {
     it('lets only the seller confirm receipt', async () => {
       const trade = await escrowedTrade('100');
       await expect(p2p.confirmFiatReceived(trade.id, TAKER)).rejects.toMatchObject({ code: 'p2p.not_the_seller' });
+      expect(await escrowOf(MAKER)).toBe('100');
+    });
+
+    it('a stranger marking or confirming fiat matches a missing trade', async () => {
+      const trade = await escrowedTrade('100');
+      const missingId = '88888888-8888-4888-8888-888888888888';
+      const shape = async (run: (id: string) => Promise<unknown>, id: string) => {
+        try {
+          await run(id);
+          return null;
+        } catch (e) {
+          const err = e as P2pError;
+          return { code: err.code, message: err.message.replaceAll(id, '<id>') };
+        }
+      };
+      for (const run of [(id: string) => p2p.markFiatSent(id, OTHER), (id: string) => p2p.confirmFiatReceived(id, OTHER)]) {
+        expect(await shape(run, trade.id)).toEqual(await shape(run, missingId));
+      }
       expect(await escrowOf(MAKER)).toBe('100');
     });
   });
