@@ -705,6 +705,33 @@ describe('svc-p2p escrow', () => {
       expect(missing).toEqual({ code: 'p2p.trade_not_found', message: 'Trade <id> not found' });
       expect(await escrowOf(MAKER)).toBe('100');
     });
+
+    it('a stranger cancel echoes the caller id spelling, same as a miss', async () => {
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      const stored = 'abcdabcd-abcd-4abc-8abc-abcdabcdabcd';
+      await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: stored,
+      });
+      const callerId = stored.toUpperCase();
+      const missingId = 'EEEEEEEE-EEEE-4EEE-8EEE-EEEEEEEEEEEE';
+      const shape = async (id: string) => {
+        try {
+          await p2p.cancelTrade(id, OTHER);
+          return null;
+        } catch (e) {
+          const err = e as P2pError;
+          return { code: err.code, message: err.message };
+        }
+      };
+      expect(await shape(callerId)).toEqual({ code: 'p2p.trade_not_found', message: `Trade ${callerId} not found` });
+      expect(await shape(missingId)).toEqual({ code: 'p2p.trade_not_found', message: `Trade ${missingId} not found` });
+      expect(await escrowOf(MAKER)).toBe('100');
+    });
   });
 
   // ── Disputes ──────────────────────────────────────────────────────────────
