@@ -36,25 +36,25 @@ Names in quotes are the `title` strings in `route-semantics.js`.
 
 ### Home, sign-in, and public pages
 
-| Path | Name in `route-semantics.js` | Page file |
-| --- | --- | --- |
-| `/` and `/index` | Home | `src/pages/index/Index.vue` |
-| `/login` and `/login/returnUrl/:returnUrl` | Sign in | `src/pages/uc/Login.vue` |
-| `/register` | Create account | `src/pages/uc/Register.vue` |
-| `/reg` | Create account on mobile | `src/pages/uc/MobileRegister.vue` |
-| `/findPwd` | Recover account | `src/pages/uc/FindPwd.vue` |
-| `/app` | Mobile app | `src/pages/uc/AppDownload.vue` |
-| `/help` | Help centre | `src/pages/cms/Help.vue` |
-| `/helplist` | Help topics | `src/pages/cms/HelpList.vue` |
-| `/helpdetail` | Help article | `src/pages/cms/HelpDetail.vue` |
-| `/notice` | Announcements | `src/pages/cms/Notice.vue` |
-| `/announcement/:id` | Announcement | `src/pages/cms/NoticeItem.vue` |
-| `/invite` | Invitations | `src/pages/invite/Invite.vue` |
-| `/lab` | Lab | `src/pages/activity/Activity.vue` |
-| `/lab/detail/:id` | Lab activity | `src/pages/activity/ActivityDetail.vue` |
-| `/partner` | Partner programme | `src/pages/activity/Partner.vue` |
-| `/bzb` | Token information | `src/pages/activity/Bzb.vue` |
-| `/about-us` | About INTAFACED | `src/pages/cms/AboutUs.vue` |
+| Path                                       | Name in `route-semantics.js` | Page file                               |
+| ------------------------------------------ | ---------------------------- | --------------------------------------- |
+| `/` and `/index`                           | Home                         | `src/pages/index/Index.vue`             |
+| `/login` and `/login/returnUrl/:returnUrl` | Sign in                      | `src/pages/uc/Login.vue`                |
+| `/register`                                | Create account               | `src/pages/uc/Register.vue`             |
+| `/reg`                                     | Create account on mobile     | `src/pages/uc/MobileRegister.vue`       |
+| `/findPwd`                                 | Recover account              | `src/pages/uc/FindPwd.vue`              |
+| `/app`                                     | Mobile app                   | `src/pages/uc/AppDownload.vue`          |
+| `/help`                                    | Help centre                  | `src/pages/cms/Help.vue`                |
+| `/helplist`                                | Help topics                  | `src/pages/cms/HelpList.vue`            |
+| `/helpdetail`                              | Help article                 | `src/pages/cms/HelpDetail.vue`          |
+| `/notice`                                  | Announcements                | `src/pages/cms/Notice.vue`              |
+| `/announcement/:id`                        | Announcement                 | `src/pages/cms/NoticeItem.vue`          |
+| `/invite`                                  | Invitations                  | `src/pages/invite/Invite.vue`           |
+| `/lab`                                     | Lab                          | `src/pages/activity/Activity.vue`       |
+| `/lab/detail/:id`                          | Lab activity                 | `src/pages/activity/ActivityDetail.vue` |
+| `/partner`                                 | Partner programme            | `src/pages/activity/Partner.vue`        |
+| `/bzb`                                     | Token information            | `src/pages/activity/Bzb.vue`            |
+| `/about-us`                                | About INTAFACED              | `src/pages/cms/AboutUs.vue`             |
 
 `/announcement` redirects to `/notice`. `/ctc` redirects to `/p2p`. Both are in `routes.js`.
 
@@ -62,8 +62,8 @@ The marketing header links Desk, Money, Pay, and Platform (`src/App.vue`, `isMar
 
 ### Exchange desk
 
-| Path | Name | Page file |
-| --- | --- | --- |
+| Path                              | Name          | Page file                         |
+| --------------------------------- | ------------- | --------------------------------- |
 | `/exchange` and `/exchange/:pair` | Exchange desk | `src/pages/exchange/Exchange.vue` |
 
 `App.vue` treats only those two paths as the full-viewport terminal (`isTerminalRoute`). The same header offers a link to `/dex` beside it. `/dex` is a different page, listed with the platform modules.
@@ -72,51 +72,51 @@ The marketing header links Desk, Money, Pay, and Platform (`src/App.vue`, `isMar
 
 Bank and pay paths are flat routes, not nested children (`routes.js` comment above `/bank`). The tab lists are `src/config/ix-nav.js` (`BANK_NAV`, `PAY_NAV`).
 
-| Path | Name | Page file |
-| --- | --- | --- |
-| `/bank` | Bank | `src/pages/intafaced/Bank.vue` |
-| `/bank/spaces` | Bank spaces | `src/pages/intafaced/bank/Spaces.vue` |
-| `/bank/transfers` | Bank transfers | `src/pages/intafaced/bank/Transfers.vue` |
-| `/bank/earn` | Bank earn | `src/pages/intafaced/bank/Earn.vue` |
-| `/bank/loans` | Bank loans | `src/pages/intafaced/bank/Loans.vue` |
-| `/bank/cards` | Bank cards | `src/pages/intafaced/bank/Cards.vue` |
-| `/bank/ramps` | Bank ramps | `src/pages/intafaced/bank/Ramps.vue` |
-| `/bank/analytics` | Bank analytics | `src/pages/intafaced/bank/Analytics.vue` |
-| `/bank/business` | Business banking | `src/pages/intafaced/bank/Business.vue` |
-| `/pay` | Payments | `src/pages/intafaced/Pay.vue` |
-| `/pay/money` | Payment balances | `src/pages/intafaced/pay/Money.vue` |
-| `/pay/merchant` | Merchant payments | `src/pages/intafaced/pay/Merchant.vue` |
-| `/pay/network` | Payment network | `src/pages/intafaced/pay/Network.vue` |
+| Path               | Name                | Page file                                 |
+| ------------------ | ------------------- | ----------------------------------------- |
+| `/bank`            | Bank                | `src/pages/intafaced/Bank.vue`            |
+| `/bank/spaces`     | Bank spaces         | `src/pages/intafaced/bank/Spaces.vue`     |
+| `/bank/transfers`  | Bank transfers      | `src/pages/intafaced/bank/Transfers.vue`  |
+| `/bank/earn`       | Bank earn           | `src/pages/intafaced/bank/Earn.vue`       |
+| `/bank/loans`      | Bank loans          | `src/pages/intafaced/bank/Loans.vue`      |
+| `/bank/cards`      | Bank cards          | `src/pages/intafaced/bank/Cards.vue`      |
+| `/bank/ramps`      | Bank ramps          | `src/pages/intafaced/bank/Ramps.vue`      |
+| `/bank/analytics`  | Bank analytics      | `src/pages/intafaced/bank/Analytics.vue`  |
+| `/bank/business`   | Business banking    | `src/pages/intafaced/bank/Business.vue`   |
+| `/pay`             | Payments            | `src/pages/intafaced/Pay.vue`             |
+| `/pay/money`       | Payment balances    | `src/pages/intafaced/pay/Money.vue`       |
+| `/pay/merchant`    | Merchant payments   | `src/pages/intafaced/pay/Merchant.vue`    |
+| `/pay/network`     | Payment network     | `src/pages/intafaced/pay/Network.vue`     |
 | `/pay/permissions` | Payment permissions | `src/pages/intafaced/pay/Permissions.vue` |
-| `/pay/links` | Payment links | `src/pages/intafaced/pay/Links.vue` |
-| `/pay/payments` | Payment activity | `src/pages/intafaced/pay/Payments.vue` |
+| `/pay/links`       | Payment links       | `src/pages/intafaced/pay/Links.vue`       |
+| `/pay/payments`    | Payment activity    | `src/pages/intafaced/pay/Payments.vue`    |
 | `/pay/settlements` | Payment settlements | `src/pages/intafaced/pay/Settlements.vue` |
-| `/pay/checkout` | Checkout | `src/pages/intafaced/pay/Checkout.vue` |
+| `/pay/checkout`    | Checkout            | `src/pages/intafaced/pay/Checkout.vue`    |
 
 Account money paths live under `/uc`, inside `src/pages/uc/MemberCenter.vue`. These child routes do **not** set `requiresAuth`:
 
-| Path | Name | Page file |
-| --- | --- | --- |
-| `/uc/money` | Balances | `src/components/uc/MoneyIndex.vue` |
-| `/uc/record` | Transaction records | `src/components/uc/Record.vue` |
-| `/uc/recharge` | Deposit | `src/components/uc/Recharge.vue` |
-| `/uc/withdraw` | Withdraw | `src/components/uc/Withdraw.vue` |
+| Path                   | Name                 | Page file                               |
+| ---------------------- | -------------------- | --------------------------------------- |
+| `/uc/money`            | Balances             | `src/components/uc/MoneyIndex.vue`      |
+| `/uc/record`           | Transaction records  | `src/components/uc/Record.vue`          |
+| `/uc/recharge`         | Deposit              | `src/components/uc/Recharge.vue`        |
+| `/uc/withdraw`         | Withdraw             | `src/components/uc/Withdraw.vue`        |
 | `/uc/withdraw/address` | Withdrawal addresses | `src/components/uc/WithdrawAddress.vue` |
-| `/uc/entrust/current` | Open orders | `src/components/uc/EntrustCurrent.vue` |
-| `/uc/entrust/history` | Order history | `src/components/uc/EntrustHistory.vue` |
+| `/uc/entrust/current`  | Open orders          | `src/components/uc/EntrustCurrent.vue`  |
+| `/uc/entrust/history`  | Order history        | `src/components/uc/EntrustHistory.vue`  |
 
 `Recharge.vue`, `Withdraw.vue`, and `WithdrawAddress.vue` each render `src/components/uc/CustodyNotBuilt.vue`. The route still opens.
 
 Peer-to-peer:
 
-| Path | Name | Page file | Auth |
-| --- | --- | --- | --- |
-| `/p2p` | Peer-to-peer trading | `src/pages/intafaced/P2P.vue` | no |
-| `/otc` | Peer-to-peer trading | `src/pages/otc/Main.vue` | yes, on the parent |
-| `/otc/trade/*` | Peer-to-peer market | `src/pages/otc/Trade.vue` | yes, because the parent matches |
-| `/otc/tradeInfo` | Peer-to-peer order details | `src/pages/otc/TradeInfo.vue` | yes |
-| `/checkuser` | Counterparty verification | `src/pages/otc/CheckUser.vue` | yes |
-| `/chat` | Order chat | `src/pages/otc/Chat.vue` | yes |
+| Path             | Name                       | Page file                     | Auth                            |
+| ---------------- | -------------------------- | ----------------------------- | ------------------------------- |
+| `/p2p`           | Peer-to-peer trading       | `src/pages/intafaced/P2P.vue` | no                              |
+| `/otc`           | Peer-to-peer trading       | `src/pages/otc/Main.vue`      | yes, on the parent              |
+| `/otc/trade/*`   | Peer-to-peer market        | `src/pages/otc/Trade.vue`     | yes, because the parent matches |
+| `/otc/tradeInfo` | Peer-to-peer order details | `src/pages/otc/TradeInfo.vue` | yes                             |
+| `/checkuser`     | Counterparty verification  | `src/pages/otc/CheckUser.vue` | yes                             |
+| `/chat`          | Order chat                 | `src/pages/otc/Chat.vue`      | yes                             |
 
 The empty `/otc` child redirects to `trade/usdt`, so the signed-in desk opens at `/otc/trade/usdt` (`routes.js`). The legacy header item for that URL is `display:none` (`App.vue`). `/ctc` does not mount `src/pages/ctc/Ctc.vue`. It redirects to `/p2p`.
 
@@ -126,29 +126,29 @@ The empty `/otc` child redirects to `trade/usdt`, so the signed-in desk opens at
 
 The header dropdown is `MODULES` in `src/config/intafaced.js`, rendered from `App.vue` (`ixModules`). These routes are also in `routes.js`:
 
-| Path | Name | Page file |
-| --- | --- | --- |
-| `/bank` | Bank | already listed under money |
-| `/pay` | Payments | already listed under money |
-| `/market` | Market intelligence | `src/pages/intafaced/Market.vue` |
-| `/market/mine` | My market research | `src/pages/intafaced/market/Mine.vue` |
-| `/support` | Support | `src/pages/intafaced/Support.vue` |
-| `/portfolio` | Portfolio | `src/pages/intafaced/Portfolio.vue` |
-| `/p2p` | Peer-to-peer trading | already listed |
-| `/token` | Token | `src/pages/intafaced/Token.vue` |
-| `/agents` | Agents | `src/pages/intafaced/Agents.vue` |
-| `/blueprint` | Blueprint | `src/pages/intafaced/Blueprint.vue` |
-| `/protocol` | Protocol | `src/pages/intafaced/Protocol.vue` |
-| `/dex` | Decentralized exchange | `src/pages/intafaced/Dex.vue` |
-| `/chain` | Chain | `src/pages/intafaced/Chain.vue` |
-| `/academy` | Academy | `src/pages/intafaced/Academy.vue` |
-| `/launch` | Launch | `src/pages/intafaced/Launch.vue` |
-| `/quant` | Quant | `src/pages/intafaced/quant/Sandbox.vue` |
-| `/quant/studio` | Quant studio | `src/pages/intafaced/quant/Studio.vue` |
-| `/quant/backtest` | Quant backtest | `src/pages/intafaced/quant/Backtest.vue` |
-| `/execution` | Execution | `src/pages/intafaced/execution/Arb.vue` |
-| `/predict` | Prediction markets | `src/pages/intafaced/Predict.vue` |
-| `/mining` | Mining | `src/pages/intafaced/Mining.vue` |
+| Path              | Name                   | Page file                                |
+| ----------------- | ---------------------- | ---------------------------------------- |
+| `/bank`           | Bank                   | already listed under money               |
+| `/pay`            | Payments               | already listed under money               |
+| `/market`         | Market intelligence    | `src/pages/intafaced/Market.vue`         |
+| `/market/mine`    | My market research     | `src/pages/intafaced/market/Mine.vue`    |
+| `/support`        | Support                | `src/pages/intafaced/Support.vue`        |
+| `/portfolio`      | Portfolio              | `src/pages/intafaced/Portfolio.vue`      |
+| `/p2p`            | Peer-to-peer trading   | already listed                           |
+| `/token`          | Token                  | `src/pages/intafaced/Token.vue`          |
+| `/agents`         | Agents                 | `src/pages/intafaced/Agents.vue`         |
+| `/blueprint`      | Blueprint              | `src/pages/intafaced/Blueprint.vue`      |
+| `/protocol`       | Protocol               | `src/pages/intafaced/Protocol.vue`       |
+| `/dex`            | Decentralized exchange | `src/pages/intafaced/Dex.vue`            |
+| `/chain`          | Chain                  | `src/pages/intafaced/Chain.vue`          |
+| `/academy`        | Academy                | `src/pages/intafaced/Academy.vue`        |
+| `/launch`         | Launch                 | `src/pages/intafaced/Launch.vue`         |
+| `/quant`          | Quant                  | `src/pages/intafaced/quant/Sandbox.vue`  |
+| `/quant/studio`   | Quant studio           | `src/pages/intafaced/quant/Studio.vue`   |
+| `/quant/backtest` | Quant backtest         | `src/pages/intafaced/quant/Backtest.vue` |
+| `/execution`      | Execution              | `src/pages/intafaced/execution/Arb.vue`  |
+| `/predict`        | Prediction markets     | `src/pages/intafaced/Predict.vue`        |
+| `/mining`         | Mining                 | `src/pages/intafaced/Mining.vue`         |
 
 `/market/mine` embeds `src/pages/intafaced/market/StrategyListing.vue`. That file is not its own route. Quant tab targets are `QUANT_NAV` and market tabs are `MARKET_NAV` in `ix-nav.js`.
 
@@ -162,20 +162,20 @@ The header dropdown is `MODULES` in `src/config/intafaced.js`, rendered from `Ap
 
 These are children of `/uc` unless noted. The parent itself does not set `requiresAuth`. The children that do are marked in `routes.js`. `/uc` and `/uc/safe` are the same component.
 
-| Path | Name | Page file |
-| --- | --- | --- |
-| `/uc` and `/uc/safe` | Account / Account security | `src/components/uc/Safe.vue` |
-| `/uc/account` | Account verification | `src/components/uc/Account.vue` |
-| `/uc/ad` | My advertisements | `src/components/otc/MyAd.vue` |
-| `/uc/ad/create` | Create advertisement | `src/pages/otc/AdPublish.vue` |
-| `/uc/ad/update` | Update advertisement | `src/pages/otc/AdPublish.vue` |
-| `/uc/order` | Peer-to-peer orders | `src/components/uc/myorder.vue` |
-| `/uc/trade` | Trade history | `src/components/uc/MinTrade.vue` |
-| `/uc/invitingmining` | Invitation rewards | `src/components/uc/InvitingMin.vue` |
-| `/uc/paydividends` | Dividend records | `src/components/uc/PayDividends.vue` |
-| `/uc/promotion/mycards` | Promotion cards | `src/components/uc/PromotionMyCards.vue` |
-| `/uc/promotion/mypromotion` | My promotions | `src/components/uc/MyPromotion.vue` |
-| `/uc/innovation/myorders` | Innovation orders | `src/components/uc/InnovationOrders.vue` |
+| Path                        | Name                       | Page file                                |
+| --------------------------- | -------------------------- | ---------------------------------------- |
+| `/uc` and `/uc/safe`        | Account / Account security | `src/components/uc/Safe.vue`             |
+| `/uc/account`               | Account verification       | `src/components/uc/Account.vue`          |
+| `/uc/ad`                    | My advertisements          | `src/components/otc/MyAd.vue`            |
+| `/uc/ad/create`             | Create advertisement       | `src/pages/otc/AdPublish.vue`            |
+| `/uc/ad/update`             | Update advertisement       | `src/pages/otc/AdPublish.vue`            |
+| `/uc/order`                 | Peer-to-peer orders        | `src/components/uc/myorder.vue`          |
+| `/uc/trade`                 | Trade history              | `src/components/uc/MinTrade.vue`         |
+| `/uc/invitingmining`        | Invitation rewards         | `src/components/uc/InvitingMin.vue`      |
+| `/uc/paydividends`          | Dividend records           | `src/components/uc/PayDividends.vue`     |
+| `/uc/promotion/mycards`     | Promotion cards            | `src/components/uc/PromotionMyCards.vue` |
+| `/uc/promotion/mypromotion` | My promotions              | `src/components/uc/MyPromotion.vue`      |
+| `/uc/innovation/myorders`   | Innovation orders          | `src/components/uc/InnovationOrders.vue` |
 
 ### Anything else
 
@@ -192,13 +192,13 @@ Page files that are not routes:
 
 The served team desk is `apps/admin`. The operator nav is the `ROUTES` array in `apps/admin/src/components/nav.tsx`. Each href is a `page.tsx`:
 
-| Path | Nav label | Page file | What the page file mounts |
-| --- | --- | --- | --- |
-| `/` | Kill-switches | `apps/admin/src/app/page.tsx` | `KillSwitchBoard` |
-| `/launch` | Launch sequence | `apps/admin/src/app/launch/page.tsx` | `LaunchSequence` |
-| `/jurisdiction` | Jurisdiction | `apps/admin/src/app/jurisdiction/page.tsx` | `JurisdictionBoard` |
-| `/ledger` | Ledger ops | `apps/admin/src/app/ledger/page.tsx` | `LedgerOps` |
-| `/tools` | Operator tools | `apps/admin/src/app/tools/page.tsx` | `OperatorToolsBoard` |
+| Path            | Nav label       | Page file                                  | What the page file mounts |
+| --------------- | --------------- | ------------------------------------------ | ------------------------- |
+| `/`             | Kill-switches   | `apps/admin/src/app/page.tsx`              | `KillSwitchBoard`         |
+| `/launch`       | Launch sequence | `apps/admin/src/app/launch/page.tsx`       | `LaunchSequence`          |
+| `/jurisdiction` | Jurisdiction    | `apps/admin/src/app/jurisdiction/page.tsx` | `JurisdictionBoard`       |
+| `/ledger`       | Ledger ops      | `apps/admin/src/app/ledger/page.tsx`       | `LedgerOps`               |
+| `/tools`        | Operator tools  | `apps/admin/src/app/tools/page.tsx`        | `OperatorToolsBoard`      |
 
 The layout titles the app "INTAFACED · Operator Console" and renders that nav (`apps/admin/src/app/layout.tsx`).
 
