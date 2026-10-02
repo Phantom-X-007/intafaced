@@ -98,6 +98,29 @@ describe('OtcDeskService', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
+  it('a stranger accept matches a missing quote', async () => {
+    let now = new Date('2026-08-07T12:00:00.000Z');
+    const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('1000')), {
+      law: published,
+      midSource: freshMids(() => now),
+      now: () => now,
+    });
+    const quote = await svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });
+    const stranger = { userId: '00000000-0000-4000-8000-000000000002' } as import('@intafaced/auth').Principal;
+    const missing = await svc.accept(stranger, { quoteId: '00000000-0000-4000-8000-000000000099' }).then(
+      () => null,
+      (err: unknown) => err,
+    );
+    const foreign = await svc.accept(stranger, { quoteId: quote.quoteId }).then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(missing).toBeInstanceOf(OtcError);
+    expect(foreign).toBeInstanceOf(OtcError);
+    expect((foreign as OtcError).code).toBe((missing as OtcError).code);
+    expect((foreign as OtcError).message).toBe((missing as OtcError).message);
+  });
+
   it('accept after expiry refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('1000')), {
