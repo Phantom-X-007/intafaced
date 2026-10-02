@@ -84,6 +84,35 @@ describe('iceberg — display visible, hidden refills', () => {
     expect(book.depth(50).asks).toEqual([['100', '2']]);
   });
 
+  it('fills the other order at the same price and does not take a second iceberg slice', () => {
+    const book = new OrderBook('BTC/USDT');
+    const other = '66666666-6666-4666-8666-666666666666';
+    book.submit(order({ id: ICE, account: 'mm', side: 'sell', qty: '10', price: '100', displayQty: '2' }));
+    book.submit(order({ id: other, account: 'other', side: 'sell', qty: '3', price: '100' }));
+    const take = book.submit(order({ id: TAKE, account: 'taker', side: 'buy', qty: '8', price: '100' }));
+    expect(take.fills.map((f) => [f.makerOrderId, formatAmount(f.qty)])).toEqual([
+      [ICE, '2'],
+      [other, '3'],
+    ]);
+    const ice = book.toState().asks[0]!.orders.find((o) => o.orderId === ICE)!;
+    expect(ice.remaining).toBe('8');
+    expect(ice.displayRemaining).toBe('2');
+  });
+
+  it('still fills the next price after one iceberg slice', () => {
+    const book = new OrderBook('BTC/USDT');
+    const other = '66666666-6666-4666-8666-666666666666';
+    book.submit(order({ id: ICE, account: 'mm', side: 'sell', qty: '10', price: '100', displayQty: '2' }));
+    book.submit(order({ id: other, account: 'other', side: 'sell', qty: '1', price: '101' }));
+    const take = book.submit(order({ id: TAKE, account: 'taker', side: 'buy', qty: '8', price: '101' }));
+    expect(take.fills.map((f) => [f.makerOrderId, formatAmount(f.qty)])).toEqual([
+      [ICE, '2'],
+      [other, '1'],
+    ]);
+    const ice = book.toState().asks[0]!.orders.find((o) => o.orderId === ICE)!;
+    expect(ice.remaining).toBe('8');
+  });
+
   it('hidden remainder refills the display after the visible slice is taken', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: ICE, account: 'mm', side: 'sell', qty: '5', price: '100', displayQty: '2' }));
