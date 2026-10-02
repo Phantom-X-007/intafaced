@@ -2,7 +2,7 @@
 
 INTAFACED monorepo. Doctrine: [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md). Protocol: [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md).
 
-Build the product. Do not spend the session writing `docs/**` boards, ADRs, LIVE-LANES, or TRACKER recooks.
+Build the product. Do not spend the session writing `docs/**` boards, LIVE-LANES, or TRACKER recooks. `/grill-with-docs` may add a `GLOSSARY.md` entry or one ADR in the existing `docs/adr/` shape.
 
 ## Hard stops (money + integrity only)
 
@@ -27,7 +27,7 @@ Build the product. Do not spend the session writing `docs/**` boards, ADRs, LIVE
 
 ## Skills
 
-Repo law beats installed skills. Skills that say `git worktree add` or block ship on CI/verify are wrong here.
+Repo law beats installed skills. Skills that say `git worktree add` or block ship on CI/verify are wrong here. Engineering skill config is `docs/agents/` (also summarized in `CLAUDE.md`). New ADRs use the dated files already in `docs/adr/`. Do not start a `0001-` series.
 
 ## Graphify
 

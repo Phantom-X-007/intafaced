@@ -18,10 +18,11 @@ Single-context repo (most repos):
 /
 ├── GLOSSARY.md
 ├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+│   └── 2026-08-08-price-oracle-fail-closed.md
 └── src/
 ```
+
+This repo is single-context. ADRs are dated slugs in `docs/adr/`. Match the files already there: title, Status, Date, then Decision and Consequences. Do not start a numbered `0001-` series. `GLOSSARY.md` is created at the root when the first term is resolved.
 
 Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
 
@@ -48,4 +49,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts `docs/adr/2026-08-08-price-oracle-fail-closed.md`, but worth reopening because…_
