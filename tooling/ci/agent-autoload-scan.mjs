@@ -39,11 +39,9 @@ mustInclude('AGENTS.md', 'number', 'money must not be a JS number');
 mustInclude('AGENTS.md', 'INTERNET-LEVERAGE-LAW', 'do not rebuild kit / second book');
 mustInclude('AGENTS.md', 'Internet leverage law', 'section name the scan already keys on');
 mustInclude('AGENTS.md', 'pnpm wt', 'worktree law');
-mustInclude('AGENTS.md', 'graphify query', 'query-first map; without this agents grep the universe');
+mustInclude('AGENTS.md', 'COORDINATION-TRUTH-LAYERS', 'tracker is a map, not a permission system');
 
-mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude must chain into AGENTS.md');
-mustInclude('CLAUDE.md', 'COORDINATION-TRUTH-LAYERS', 'Claude sees layers');
-mustInclude('CLAUDE.md', 'INTERNET-LEVERAGE-LAW', 'Claude sees leverage');
+mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude must chain into the one set of rules');
 
 mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'COORDINATION-TRUTH-LAYERS', 'protocol hard path must name the layers home');
 mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'Full access', 'agents must not regress to human permission gates');

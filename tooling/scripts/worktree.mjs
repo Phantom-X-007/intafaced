@@ -15,7 +15,7 @@
  *
  *   node tooling/scripts/worktree.mjs --self-test   start-point fixtures (no git, no I/O)
  */
-import { execFileSync, spawnSync, spawn } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -174,73 +174,6 @@ function baseBranch() {
  *
  * Returns null when the name is legal, or the operator-facing message when not.
  */
-/** True when the seed is too old to query — block `pnpm wt` until `graphify update` finishes. */
-export function shouldRefreshGraph(commitsBehind) {
-  return Number.isFinite(commitsBehind) && commitsBehind > 50;
-}
-
-/** True when a detached (non-blocking) update is enough (1–50 commits behind). */
-export function shouldDetachRefreshGraph(commitsBehind) {
-  return Number.isFinite(commitsBehind) && commitsBehind >= 1 && commitsBehind <= 50;
-}
-
-/**
- * Official graphify post-commit hook skips linked worktrees. This repo only
- * cooks in worktrees, so `pnpm wt` refreshes the local map when it is stale.
- * Fail-open: missing CLI or a failed update must not block creating the tree.
- * Does not commit graphify-out — product PRs must not swallow a 20MB map.
- */
-function refreshGraphIfStale(worktreePath) {
-  const graphPath = join(worktreePath, 'graphify-out', 'graph.json');
-  if (!existsSync(graphPath)) return;
-  let built = '';
-  try {
-    built = JSON.parse(readFileSync(graphPath, 'utf8')).built_at_commit || '';
-  } catch {
-    console.error('· graphify-out/graph.json unreadable — skip map refresh');
-    return;
-  }
-  if (!built) return;
-  const behindOut = spawnSync('git', ['rev-list', '--count', `${built}..HEAD`], {
-    cwd: worktreePath,
-    encoding: 'utf8',
-  });
-  const n = Number((behindOut.stdout || '').trim());
-  const blocking = shouldRefreshGraph(n);
-  const detached = shouldDetachRefreshGraph(n);
-  if (!blocking && !detached) return;
-
-  const env = {
-    ...process.env,
-    GRAPHIFY_MAX_WORKERS: process.env.GRAPHIFY_MAX_WORKERS || '1',
-  };
-  const script = join(worktreePath, 'tooling/scripts/graphify-worktree-update.sh');
-  const which = spawnSync('command', ['-v', 'graphify'], { encoding: 'utf8', shell: true, env });
-  if (which.status !== 0 && !existsSync(script)) {
-    console.log('· graphify CLI missing — skip map refresh');
-    return;
-  }
-  if (blocking) {
-    console.log(`· graphify update (${n} commits behind)`);
-    const upd = existsSync(script)
-      ? spawnSync(script, ['--wait'], { cwd: worktreePath, encoding: 'utf8', env, timeout: 600000 })
-      : spawnSync('graphify', ['update', '.'], {
-          cwd: worktreePath,
-          encoding: 'utf8',
-          env,
-          timeout: 600000,
-        });
-    if (upd.status !== 0) {
-      console.error('⚠ graphify update failed — worktree is usable; run GRAPHIFY_MAX_WORKERS=1 graphify update . in it');
-    }
-    return;
-  }
-  console.log(`· graphify update detached (${n} commits behind)`);
-  if (existsSync(script)) {
-    spawn(script, [], { cwd: worktreePath, env, detached: true, stdio: 'ignore' }).unref();
-  }
-}
-
 export function conventionError(branch) {
   if (!branch) return 'Usage: pnpm wt <branch-name>\n  e.g. pnpm wt feat/svc-identity-rank-events';
   if (/^(feat|fix|chore|docs|test|refactor)\//.test(branch)) return null;
@@ -418,8 +351,6 @@ function create(branch) {
     execFileSync(process.execPath, ['-e', `require('fs').copyFileSync(${JSON.stringify(env)}, ${JSON.stringify(join(path, '.env'))})`]);
     console.log('· copied .env');
   }
-
-  refreshGraphIfStale(path);
 
   // REPORT THE BASE. A worktree cut 38 commits stale looks identical to a fresh
   // one, and on 2026-08-09 one was only caught because an agent had been told to
@@ -637,14 +568,6 @@ if (selfTest) {
   check('a bare name is refused', conventionError('worktree-fix') !== null, true);
   check('an unknown prefix is refused', conventionError('wip/thing') !== null, true);
   check('no name at all is refused', conventionError('') !== null, true);
-  check('graph behind 50 does not blocking-refresh', shouldRefreshGraph(50), false);
-  check('graph behind 51 does blocking-refresh', shouldRefreshGraph(51), true);
-  check('graph behind NaN does not refresh', shouldRefreshGraph(Number.NaN), false);
-  check('graph behind 0 does not detach-refresh', shouldDetachRefreshGraph(0), false);
-  check('graph behind 1 does detach-refresh', shouldDetachRefreshGraph(1), true);
-  check('graph behind 50 does detach-refresh', shouldDetachRefreshGraph(50), true);
-  check('graph behind 51 does not detach-refresh', shouldDetachRefreshGraph(51), false);
-
   check('pinned pnpm is never the bare PATH name', pinnedPnpmPath('/repo') === 'pnpm', false);
   check('pinned pnpm is repo .tools/bin/pnpm', pinnedPnpmPath('/repo'), join('/repo', '.tools', 'bin', 'pnpm'));
   check('node24 pin is 24.x', NODE24_PIN.version.startsWith('24.'), true);
@@ -681,7 +604,7 @@ if (selfTest) {
     check('install does not spawn PATH pnpm', runtime.includes("spawnSync('pnpm'"), false);
     check('install uses the pinned pnpm binary', runtime.includes("spawnSync(pnpmBin, ['install']"), true);
     check('install does not use shell:true', /spawnSync\(pnpmBin, \['install'\], \{[^}]*shell: true/s.test(runtime), false);
-    check('graphify env does not hardcode a home PATH', runtime.includes('/Users/Nitro/.local/bin'), false);
+    check('pnpm wt does not refresh the map', runtime.includes('graphify'), false);
   }
 
   let failed = 0;

@@ -1,34 +1,53 @@
 # Instructions for AI agents
 
-INTAFACED monorepo. Doctrine: [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md). Protocol: [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md).
+INTAFACED monorepo. Build the product and ship it.
 
-Build the product. Do not spend the session writing `docs/**` boards, LIVE-LANES, or TRACKER recooks. `/grill-with-docs` may add a `GLOSSARY.md` entry or one ADR in the existing `docs/adr/` shape.
+Doctrine: [`INTAFACED_DEFINITIVE_BUILD.md`](INTAFACED_DEFINITIVE_BUILD.md). Protocol: [`tooling/agent-protocol/AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md).
 
-## Hard stops (money + integrity only)
+## Ship (full access)
 
-1. Never move value outside `packages/ledger-client`. No module holds its own balance.
+1. Review, audit, and debug the change. **Merge when done.** Any agent may merge their own pull request.
+2. **Do not wait for CI green.** GitHub Actions and `pnpm verify` are informational, never a ship gate.
+3. Start without waiting for a person, an audit seal, FREEZE, a tracker claim, LIVE-LANES, or `pnpm ledger`. A blocked money path refuses closed, with an honest empty state. Leave the audit flag alone.
+4. Any product path is fair game once its dependencies are met, including money. A blank price, limit, or sanctions list stays blank: refuse that action with a typed error. Do not invent live §8 magnitudes or sanctions list content.
+
+## Money
+
+1. Move value only through `packages/ledger-client`. No module holds its own balance.
 2. Never store money in a `number`. Decimal strings on the wire, scaled bigint in memory.
-3. Work in a worktree (`pnpm wt <branch>`), never the main checkout. Do not use bare `git worktree add`. Orca `worktree create` is the same thing with a sidebar card.
-4. One service per PR. Never push `main`.
-5. Do not rebuild the product SPA or a **second money book**. Prefer existing shell + ledger + `svc-*`. **Internet leverage law:** [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md). Exchange OSS take/keep/never: [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) **§0.3**. Mega backend (non-frontend) **v1.25:** [`docs/SPEC-BACKEND-MEGA-PLAN-2026-09-03.md`](docs/SPEC-BACKEND-MEGA-PLAN-2026-09-03.md). Live-wire: [`docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md). Do not hand-roll FIX/SBE/Greeks. Do not install npm `ccxt` or a second CLOB. **Protocol rails until INTACHAIN:** house book + Base P0; **do not start `svc-chain` / P1** until Nitro GO — [`docs/adr/2026-09-03-protocol-rails-until-intachain.md`](docs/adr/2026-09-03-protocol-rails-until-intachain.md).
-6. **Desk close-out.** When you stop (PR merged/closed, or work is on the branch and you are done): if this folder is not home, `git -C /Users/Nitro/projects/Sovereign worktree remove --force "$(pwd)"`. Never `orca worktree rm` (it tries to delete the branch). Never `git branch -D`. Never remove home, OS, or PSP. `pnpm wt <branch>` restores the folder. Do not leave Orca sidebar cards standing.
+3. Extend the existing shell, ledger, and `svc-*`. A second app or a **second money book** is out. **Internet leverage law:** [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md). Exchange take/keep/never: [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) **§0.3**. Leave FIX, SBE, and Greeks as adapters. Leave npm `ccxt` and a second CLOB uninstalled.
 
-## Autonomy (full access)
+## One chain of work
 
-- **No human gate before start.** Do not wait for Nitro, Denon, audit seal, FREEZE, tracker claim, LIVE-LANES, or `pnpm ledger`.
-- **No ping to unblock.** If blocked, use refuse-closed code + honest empty states — never ask a human to flip an audit flag.
-- **Merge when done.** Any agent may merge their own PR. **Do not wait for CI green** — GitHub Actions is informational, not a ship gate. Same for `pnpm verify`: optional local check, never a blocker.
-- **All tracker rows are fair game** when deps are met — including money and protocol paths. Path-intersect open PRs before edit is optional courtesy, not permission.
-- **Unset owner numbers:** refuse-closed in code (blank env → typed error). Do not invent live §8 magnitudes or sanctions list content.
+1. Work in a worktree (`pnpm wt <branch>`), never the main checkout. Bare `git worktree add` is the wrong start. Orca `worktree create` is the same thing with a sidebar card.
+2. One service per pull request. Never push `main`.
+3. If an open pull request already touches that service, or the same files, leave it and take a different part. Several agents may work at once on different parts.
+4. When you stop and this folder is not home, remove the worktree from the home checkout with `git worktree remove --force`. `orca worktree rm` deletes the branch. `git branch -D` deletes the branch. Leave home, OS, and PSP in place. `pnpm wt <branch>` restores a folder.
 
-## Coordination (optional)
+## INTACHAIN
 
-[`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md) — tracker is a map, not a permission system.
+Trading stays on the house book. Base work that already exists continues. INTACHAIN stays parked until Nitro writes GO. Leave `svc-chain` and P1 unstarted. [`docs/adr/2026-09-03-protocol-rails-until-intachain.md`](docs/adr/2026-09-03-protocol-rails-until-intachain.md).
+
+## What you write
+
+Spend the session on the product. `/grill-with-docs` may add one `GLOSSARY.md` entry, or one ADR in the existing dated `docs/adr/` shape, when a word or a hard-to-reverse decision has just settled. Do not start a `0001-` series. Status boards, LIVE-LANES, and tracker recooks stay unwritten.
+
+Coordination map, not a permission system: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
 
 ## Skills
 
-Repo law beats installed skills. Skills that say `git worktree add` or block ship on CI/verify are wrong here. Engineering skill config is `docs/agents/` (also summarized in `CLAUDE.md`). New ADRs use the dated files already in `docs/adr/`. Do not start a `0001-` series.
+Use the installed skills. This file wins where a skill says to wait for a person, wait for CI, or use `git worktree add`.
 
-## Graphify
+## Agent skills
 
-First code-location move for `services/` / `packages/`: `graphify query "<symbol>" --budget 400`, then open the one `src=` file. Vue/`vendor/` is not in the map — grep it. After those edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` (official hook skips worktrees). Map is `graphify-out/graph.json` in git.
+### Issue tracker
+
+Issues and specs live as GitHub issues on Phantom-X-007/intafaced. Use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical roles, each label equal to its name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` and dated ADRs in `docs/adr/`. See `docs/agents/domain.md`.
