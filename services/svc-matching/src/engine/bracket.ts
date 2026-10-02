@@ -168,25 +168,55 @@ function restExits(
   rec: Pending,
   now?: Date | null,
 ): SubmitResult {
-  return orig.call(
+  // The entry id is already on the book. Submitting it again is
+  // duplicate_order_id, and that rejection was folded over a fill that
+  // had already happened. The exits are their own orders.
+  const side = exitSide(rec.side);
+  const sl = orig.call(
     book,
     {
-      orderId: rec.entryId,
+      orderId: rec.slId,
+      accountId: rec.accountId,
+      type: 'stop',
+      side,
+      qty: rec.qty,
+      price: null,
+      stopPrice: rec.stopLoss,
+      tif: rec.tif,
+      ocoSiblingId: rec.tpId,
+    } as EngineOrder,
+    now,
+  );
+  if (!sl.accepted) return sl;
+
+  const tp = orig.call(
+    book,
+    {
+      orderId: rec.tpId,
       accountId: rec.accountId,
       type: 'limit',
-      side: exitSide(rec.side),
+      side,
       qty: rec.qty,
       price: rec.takeProfit,
       stopPrice: null,
       tif: rec.tif,
-      oco: true,
-      takeProfit: rec.takeProfit,
-      stopLoss: rec.stopLoss,
-      takeProfitOrderId: rec.tpId,
-      stopLossOrderId: rec.slId,
+      ocoSiblingId: rec.slId,
     } as EngineOrder,
     now,
   );
+  if (!tp.accepted) {
+    book.cancel(rec.slId);
+    return tp;
+  }
+
+  return {
+    accepted: true,
+    sequence: tp.sequence ?? sl.sequence,
+    fills: [...sl.fills, ...tp.fills],
+    resting: tp.resting ?? sl.resting,
+    cancellations: [...sl.cancellations, ...tp.cancellations],
+    triggered: [...sl.triggered, ...tp.triggered],
+  };
 }
 
 function restExitsForFills(
