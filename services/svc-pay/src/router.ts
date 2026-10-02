@@ -325,13 +325,13 @@ export function createPayRouter(
             settlementPrefs: z.record(z.unknown()).optional(),
           }),
         )
-        .output(z.object({ id: z.string().uuid(), userId: z.string().uuid(), mode: z.string(), feeBps: z.number() }))
+        .output(z.object({ id: z.string().uuid(), userId: z.string().uuid(), mode: z.string(), feeBps: z.number().nullable() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const userId = ctx.principal?.userId;
             if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
             const merchant = await pay.createMerchant({ ...input, userId });
-            return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? 0 };
+            return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? null };
           }),
         ),
 
@@ -368,7 +368,7 @@ export function createPayRouter(
               status: z.enum(['pending', 'active', 'suspended', 'closed']),
               kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
               kybRef: z.string().nullable(),
-              feeBps: z.number(),
+              feeBps: z.number().nullable(),
             })
             .nullable(),
         )
@@ -385,7 +385,7 @@ export function createPayRouter(
               status: merchant.status,
               kybStatus: merchant.kybStatus,
               kybRef: merchant.kybRef,
-              feeBps: merchant.pricing.feeBps ?? 0,
+              feeBps: merchant.pricing.feeBps ?? null,
             };
           }),
         ),

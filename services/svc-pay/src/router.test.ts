@@ -865,6 +865,28 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     expect((call!.args[0] as { userId: string }).userId).toBe(USER);
   });
 
+  it('reports an unset merchant fee as null and keeps an explicit zero', async () => {
+    const me = async (feeBps: number | undefined) => {
+      const pay = {
+        getMerchantByUserId: async () => ({
+          id: MERCHANT,
+          userId: USER,
+          mode: 'gateway' as const,
+          status: 'active' as const,
+          kybStatus: 'none' as const,
+          kybRef: null,
+          pricing: feeBps === undefined ? {} : { feeBps },
+        }),
+      } as unknown as PayService;
+      return createPayRouter(pay, rails, money.service, null, undefined, stubApprovalConsumer(CONFIRM))
+        .createCaller(await ctx(['pay:read']))
+        .merchant.me();
+    };
+    expect((await me(undefined))?.feeBps).toBeNull();
+    expect((await me(0))?.feeBps).toBe(0);
+    expect((await me(250))?.feeBps).toBe(250);
+  });
+
   it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
     const merchantApi = await caller(['pay:write']);
     const merchantErr = await merchantApi.merchant
