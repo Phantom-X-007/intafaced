@@ -183,7 +183,7 @@ export class OtcDeskService {
       throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
     }
     if (stored.quote.userId !== principal.userId) {
-      throw new OtcError('OTC quote belongs to another user', 'trade.otc_not_owner');
+      throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
     }
     if (stored.lifecycle === 'settled') {
       throw new OtcError('OTC quote already settled', 'trade.otc_already_settled');
@@ -222,7 +222,7 @@ export class OtcDeskService {
       throw new OtcError('OTC bound fill not found — accept first', 'trade.otc_quote_missing');
     }
     if (stored.bound.userId !== principal.userId) {
-      throw new OtcError('OTC fill belongs to another user', 'trade.otc_not_owner');
+      throw new OtcError('OTC bound fill not found — accept first', 'trade.otc_quote_missing');
     }
 
     // Derived from the quote, never minted: a retry after a partial post must
@@ -329,7 +329,7 @@ export class OtcDeskService {
       throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
     }
     if (stored.quote.userId !== principal.userId) {
-      throw new OtcError('OTC quote belongs to another user', 'trade.otc_not_owner');
+      throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
     }
     return stored;
   }
