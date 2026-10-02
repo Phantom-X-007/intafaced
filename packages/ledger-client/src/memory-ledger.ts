@@ -281,8 +281,9 @@ export function hashTx(tx: HashableTx, previousHash: string | null): string {
   return (
     createHash('sha256')
       .update(previousHash ?? '')
-      // Field separator — written as \u0000 so the source file is not a binary blob.
-      .update('\u0000')
+      // Space, not NUL. ledger_tx.hash was written with this byte. Reconcile
+      // recomputes it. A second separator would fail every stored row.
+      .update(' ')
       .update(canonical)
       .digest('hex')
   );
