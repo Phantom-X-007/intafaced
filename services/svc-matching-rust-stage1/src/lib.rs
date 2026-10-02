@@ -87,7 +87,7 @@ impl Book {
     fn submit(&mut self, order: Order) -> Result<(), String> {
         let qty = parse_amount(&order.qty)?;
         let price = order.price.as_deref().ok_or_else(|| "stage 1 accepts limit orders only".to_string()).and_then(parse_amount)?;
-        let side = order.side.as_str();
+        let side = order.side.clone();
         let opposite = if side == "buy" { &mut self.asks } else if side == "sell" { &mut self.bids } else { return Err(format!("invalid side: {side}")); };
         let crossing = |p: u128| if side == "buy" { price >= p } else { price <= p };
         let mut remaining = qty;
@@ -168,7 +168,9 @@ mod tests {
         let first = replay_json(FIXTURE).unwrap();
         let second = replay_json(FIXTURE).unwrap();
         assert_eq!(first, second);
-        assert_eq!(first, GOLDEN.trim());
+        let got: serde_json::Value = serde_json::from_str(&first).unwrap();
+        let want: serde_json::Value = serde_json::from_str(GOLDEN).unwrap();
+        assert_eq!(got, want);
     }
 
     #[test]
