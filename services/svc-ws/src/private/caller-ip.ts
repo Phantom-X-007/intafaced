@@ -26,13 +26,11 @@ export function apiKeyIpAllowed(allowlist: readonly string[], requestIp: string 
   return false;
 }
 
-/** First x-forwarded-for hop, else x-real-ip, else the TCP peer. Never invent. */
+/**
+ * The TCP peer. This socket is outside svc-edge, which is the door that
+ * strips a client x-forwarded-for and writes the real one. A header here
+ * is the caller talking. Never invent an address.
+ */
 export function callerIpFromUpgrade(req: IncomingMessage): string | null {
-  const raw = req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'];
-  const forwarded = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof forwarded === 'string') {
-    const first = normalizeIp(forwarded.split(',')[0] ?? '');
-    if (first) return first;
-  }
   return normalizeIp(req.socket.remoteAddress);
 }

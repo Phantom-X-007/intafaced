@@ -91,13 +91,19 @@ describe('private stream drops when the caller IP is not on the key', () => {
     });
   }
 
-  it('listed IP upgrades; foreign IP and missing IP refuse with 401', async () => {
+  it('a client-supplied listed address does not stand in for the TCP peer', async () => {
     const { host, port } = await boot(keyPort([LISTED]));
     const token = await access();
     const path = `${PRIVATE_STREAM_PATH}?access_token=${token}`;
-    expect(await upgradeStatus(host, port, path, LISTED)).toBe(101);
+    expect(await upgradeStatus(host, port, path, LISTED)).toBe(401);
     expect(await upgradeStatus(host, port, path, FOREIGN)).toBe(401);
     expect(await upgradeStatus(host, port, path)).toBe(401);
+  });
+
+  it('the TCP peer upgrades when it is on the list, even if the header names another address', async () => {
+    const { host, port } = await boot(keyPort(['127.0.0.1']));
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`, FOREIGN)).toBe(101);
   });
 
   it('empty allowlist stays open without a forwarded IP', async () => {
