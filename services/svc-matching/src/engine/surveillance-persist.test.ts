@@ -70,7 +70,7 @@ function layeringCase(): EngineSurveillanceCase {
 }
 
 describe('surveillance persist — open cases survive recover; no auto-adjudicate; detector_gap', () => {
-  it('named spoofing case persists across recover wrap', () => {
+  it('named spoofing case persists across recover wrap', async () => {
     const { engine } = build();
     const opened = recordOpenSurveillanceCase(engine, {
       accountId: 'desk',
@@ -80,7 +80,7 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
     expect(opened).toEqual({ ok: true, case: spoofingCase() });
     expect(engine.openSurveillanceCases()).toEqual([spoofingCase()]);
 
-    engine.recover();
+    await engine.recover();
 
     const persisted = engine.openSurveillanceCases();
     expect(persisted).toEqual([spoofingCase()]);
@@ -155,7 +155,7 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
     expect(engine.openSurveillanceCases()).toEqual([named]);
     expect(engine.openSurveillanceCases()).toHaveLength(1);
 
-    engine.recover();
+    await engine.recover();
     expect(engine.openSurveillanceCases()).toEqual([named]);
 
     expect(closeSurveillanceCase()).toMatchObject({ ok: false, code: AUTO_CLOSE_FORBIDDEN });
@@ -190,7 +190,7 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
     expect(onDisk).not.toHaveProperty('orderId');
   });
 
-  it('named spoofing/layering survive a new engine recover from FileJournal', () => {
+  it('named spoofing/layering survive a new engine recover from FileJournal', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'matching-h9-surv-')), 'engine.ndjson');
     const j1 = new FileJournal(path);
     const live = new MatchingEngine({ journal: j1, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
@@ -200,7 +200,7 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
 
     const j2 = new FileJournal(path);
     const recovered = new MatchingEngine({ journal: j2, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
-    recovered.recover();
+    await recovered.recover();
 
     const open = recovered.openSurveillanceCases();
     expect(open).toEqual([layeringCase(), spoofingCase()]);
@@ -222,7 +222,7 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
 
     const j2 = new FileJournal(path);
     const recovered = new MatchingEngine({ journal: j2, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
-    recovered.recover();
+    await recovered.recover();
     expect(recovered.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
     expect(j2.read().some((row) => row.kind === 'open_surveillance')).toBe(true);
     expect(j2.read().some((row) => row.kind === 'cancel')).toBe(false);
