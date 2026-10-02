@@ -2,18 +2,22 @@
 
 Structure context for agents. Read this before placing a screen, a menu, or a setting.
 
-This file is not a visual design, not a color choice, and not an order to build every room. The look stays open. The redesign map on GitHub stays the index. This file is the structure that map points at.
+This file is the structure. It is not a visual design and it does not choose colors. The look stays open. The redesign map on GitHub stays the index and points here.
 
-The first screens to draw are only these three: the shell, the exchange desk, and the Bank overview. Every other room in this file is part of the finished app. It waits until those three are accepted.
+Older frontend documents do not place rooms. That includes `docs/FRONTEND-EXCHANGE-DESK-SOT-2026-08-25.md`, `docs/FRONTEND-REMAINING-SOT-2026-08-25.md`, `docs/FRONTEND-MASTER-PLAN-WAVE-A-B-2026-07-31.md`, the other `docs/FRONTEND-*` plans, and the files under `docs/styleboard/`. If one of them disagrees with this file about where a room sits, this file wins. Those files may still hold an old layout sketch. They are not the menu.
+
+The finished app is everything in this file, including rooms that have no page yet. A missing page is not a reason to drop the room. The current site is evidence of what already has a URL. It is not the limit.
+
+The first screens to draw are only these three: the shell, the exchange desk, and the Bank overview. Drawing those three does not shrink the finished app. Every other room waits until those three are accepted. It does not wait to be named.
 
 ## What is decided, and what is open
 
-Decided here: the doors, what sits behind them, the trading desk, the chart's jobs, the view settings, and which company each choice came from.
+Decided here: the doors, which account sees which rooms, the trading desk, the chart's jobs, the view settings, where every current URL sits, and which company or product rule each choice came from.
 
 Open, and not to be invented by an agent:
 
 - Colors, type, and the overall look.
-- Which products the look should feel close to. That is a separate conversation. The five companies below were used for structure, not as a taste lock.
+- Which products the look should feel close to. The five companies below were used for structure, not as a taste lock.
 - The exact words on an empty screen, beyond the rule that an empty price stays empty.
 - Phone layout pixels. The phone uses the same doors. How they are drawn is the shell frame.
 
@@ -21,51 +25,66 @@ Open, and not to be invented by an agent:
 
 Nitro named the companies. OKX weighs more than the others when they disagree. Strike is the model for a person moving money. Robinhood, Coinbase, and Kraken are the model for a calm home and a professional desk on the same account.
 
-Pages were read from each company's own help or site on 2 October 2026. A news recap was not used as a source. Where a page failed, the same article was opened on another address of that company.
+Pages were read from each company's own help or site on 2 October 2026. A news recap was not used as a source. Where a page failed, the same article was opened on another address of that company. Rooms that come from Intafaced itself say so. They are not dressed up as a competitor feature.
+
+## Words that look alike
+
+Use these meanings. Do not mix them.
+
+- **Business account.** The Strike-style account. A company, its owners, and the merchant desk. A person can hold a Personal account and a Business account and switch without logging out.
+- **Business bank.** A tab inside the bank on Money. It is the company's cash accounts. It is not the Business account switch.
+- **Launch.** The customer room in More, for issuing and listing an asset.
+- **Launch sequence.** The team page that runs a release. Customers never see it.
+- **Market.** The catalogue in More, where listings are browsed.
+- **A market inside Trade.** One pair on the desk. Picking it updates the chart, the book, and the ticket.
+- **Earn.** A bank room on Money. It does not also live in More. OKX puts earning products under Explore. Intafaced keeps them with the balance, because that is where a person looks for yield on money they already hold.
+- **Paper.** In this company, the word alone means simulated trading. The practice switch on the desk is called **simulated**. **Paper Design** is the design tool. Sample numbers exist only inside Paper Design, and they are marked as samples.
 
 ## Personal and Business
 
 Strike's own signup page says the person chooses a Personal or a Business account. A business also submits the company and each owner. If both accounts are verified, the app switches between them without a logout. Source: Strike, "How do I create an account?"
 
-That is the mode Intafaced uses.
+That is the mode Intafaced uses. It is one product and one look. It is not a fifth door and not a second ledger.
 
-- **Personal** is the default. The person sees Money, Trade, Pay as send and receive, and More.
-- **Business** is a second account on the same login. Switching to it reveals the merchant desk inside Pay. It does not add a fifth door, and it does not create a second look.
+- **Personal** is the default. Money, Trade, Pay as send, receive, and person-to-person, and More.
+- **Business** is the company account on the same login. Switching to it reveals the merchant desk inside Pay, and the business-bank tab is the natural landing inside Money for that account.
 
-Strike Private is not this. Strike's own announcement describes a white-glove service for large clients: a person, custom pricing, and an email to the private desk. It is not a third screen mode. Intafaced does not add a Private mode to the app. A large-client service can exist later as a relationship, not as a menu.
+Strike Private is not this. Strike's own announcement describes a white-glove service for large clients: a person, custom pricing, and an email to the private desk. It is not a third screen. Intafaced does not add a Private mode. A large-client service can exist later as a relationship, not as a menu.
 
 ## The spine
 
 One product. Four customer doors.
 
-| Door  | Job                                             | Where the person lands |
-| ----- | ----------------------------------------------- | ---------------------- |
-| Money | What they hold, and the bank behind it          | Here, after sign-in    |
-| Trade | The desk                                        | One tap from Money     |
-| Pay   | Send, receive, and, in Business, get paid       | One tap                |
-| More  | The rooms that are real and are not daily doors | One tap                |
+| Door  | Job                                                         | Where the person lands |
+| ----- | ----------------------------------------------------------- | ---------------------- |
+| Money | What they hold, and the bank behind it                      | Here, after sign-in    |
+| Trade | The desk                                                    | One tap from Money     |
+| Pay   | Send, receive, person-to-person, and, in Business, get paid | One tap                |
+| More  | The rooms that are real and are not daily doors             | One tap                |
 
-Search sits in the bar on every door. It is not a fifth door.
+Search sits in the bar on every door. It is not a fifth door. The old platform index (`/platform`) is not a customer door. It is a live probe of what each module can do today. The team can open it. Customers find rooms through the four doors and through search.
 
 The phone stacks the same four doors. A later phone item, not a door, is a home-screen price and a pay button. Strike and OKX both offer a phone widget of that kind. A social feed on the chart stays out. Robinhood has one. It is not part of this structure.
 
-The public front sits in front of the doors: home, sign-in, create account, help, and announcements.
+The public front sits in front of the doors. It is not a fifth product. It holds home (`/`, `/index`), sign-in (`/login`), create account (`/register`, `/reg`), password recovery (`/findPwd`), help (`/help`, `/helplist`, `/helpdetail`), notices (`/notice`; `/announcement` redirects there), about (`/about-us`), invite (`/invite`), the app download (`/app`), partner (`/partner`), and campaigns (`/lab`, `/lab/detail/:id`, `/bzb`). Campaigns are public activity pages. They are not doors. There is no whitepaper route. The old one pointed at a file the repo does not have.
 
-The person menu is the corner: account, security, verification, and View. It is not a door.
+The person menu is the corner, not a door: account, security (`/uc/safe`), verification, language, and View. Merchant verification (`/identbusiness`) appears for someone opening a Business account. Promotions and dividend records sit here too (`/uc/promotion`, pay-dividends). They are not doors.
 
-The team door is separate, same look, never on the customer bar: kill-switches, launch sequence, jurisdiction, ledger, and operator tools.
+The team door is separate, same look, never on the customer bar: kill-switches, launch sequence, jurisdiction, ledger, and operator tools. The customer URL `/ops` belongs to this door. It is not a More room.
 
 ## Money
 
 This is the calm screen. OKX calls the matching pages Portfolio and Activity. Strike splits the home into a cash balance and a bitcoin balance. Robinhood's home is one balance and a list of holdings. Coinbase's help puts holdings under My Assets, with an available balance that is the total minus funds on hold.
 
-Intafaced lands on one total. Under it:
+Intafaced lands on one total. The portfolio page (`/portfolio`) is that holdings screen, not a separate product. Under it:
 
-- Each holding. Open one and you get the price, a simple line or candle chart, buy, sell, send, and a repeat buy. From that same holding, Trade opens the desk on that market.
-- Pending and available, shown apart. Pending can be used to buy. It cannot be sent until it is available. Taken from Strike's own limits page: pending balances are unavailable for withdrawing or sending. Coinbase states the same hold in "Understand your available balance."
-- Deposit, withdraw, and the record of money moving.
-- The bank, behind the balance: spaces, transfers, earn, loans, cards, moving between cash and crypto, spending analytics, and business accounts.
+- Each holding. Open one and you get the price, a simple line or candle chart, buy, sell, send, and a repeat buy. From that same holding, Trade opens the desk on that market. Repeat buy is the same idea as Strike's recurring buy.
+- Pending and available, shown apart. Pending can be used to buy. It cannot be sent until it is available. Taken from Strike's own limits page. Coinbase states the same hold in "Understand your available balance."
+- Deposit, withdraw, addresses, and the record of money moving (`/uc/recharge`, `/uc/withdraw`, `/uc/withdraw/address`, `/uc/record`, `/uc/money`).
+- The bank, behind the balance: overview (`/bank`), spaces, transfers, earn, loans, cards, moving between cash and crypto (`/bank/ramps`), spending analytics, and business bank accounts (`/bank/business`).
 - The whole total can be shown in dollars or in a coin. OKX's preferences page lets the person pick the display currency, including a coin. The number can be hidden.
+
+Cards are a bank room. A real card issuer plugs in later. Until then the screen says the issuer is not connected. It does not present a simulated rail as a live card.
 
 There is one ledger. OKX moves funds from a funding account to a trading account. Intafaced does not. A trading view and a spending view are two ways to look at the same ledger. A screen never keeps its own balance.
 
@@ -75,18 +94,23 @@ Deposit and withdraw that the product cannot do yet stay on the route and say th
 
 One door. The mode is a setting, not a new door. OKX's own trading-settings page is the source: inside Trade you pick Spot, Futures, or Trading bots, and an account mode decides what that screen may do.
 
-Modes, for the finished app, including ones not built yet:
+The current desk is `/exchange` and `/exchange/:pair`. Open orders and order history already live under the account as current and past entrust. They belong to this door.
+
+Modes and tools, for the finished app, including ones that have no page yet:
 
 - Spot. A new person stays here.
 - Margin. On OKX it is a switch on the spot ticket, cross or isolated. Same here.
-- Futures, perpetual and dated.
-- Options.
-- Copy. Also listed in More, so it can be found. Not its own door.
-- Bots. Also listed in More, and reachable from the ticket. Not its own door.
-
-Convert is an action on the holding and on the ticket. It is not a mode and not a door.
+- Futures, perpetual and dated. Not built as its own page yet. It is still a mode of this door.
+- Options. Not built as its own page yet. Same door. The chain is specified under the chart.
+- Convert. An action on the holding and on the ticket. Not a mode and not a door. The product plan already calls for one-tap convert. The absence of a pretty page does not remove it.
+- Copy. A mode of this door, and also listed in More so it can be found. This one comes from Intafaced's own product, not from a help page of the five companies. OKX's copy mode that was read sits on the self-custody DEX, which stays parked. Do not move Copy into the chain.
+- Bots. A mode of this door, reachable from the ticket, and listed in More. OKX puts Trading bots inside Trade.
+- Execution (`/execution`). Cross-venue execution. It lives in this door, next to bots. Quant can open it. It is not a customer door.
+- The quote desk (`/otc`, `/otc/tradeInfo`). A person asks for a price instead of taking the book. It is part of Trade. The counterparty check (`/checkuser`) and the order chat (`/chat`) belong to that quote, and also to a person-to-person trade in Pay. They are not doors.
 
 A position mode, taken from OKX, applies once futures exist: one-way, or hedge (a long and a short at the same time). Switching account mode changes what Trade shows. It does not change the doors.
+
+**Simulated** is a switch on this desk. It is clearly marked. It cannot move ledger money. It is not a door, and it is not Paper Design.
 
 ### The desk
 
@@ -99,7 +123,7 @@ Coinbase Advanced, Kraken Pro, Robinhood Legend, and OKX describe the same desk.
 - Favorites. Picking a market updates the chart, the book, and the ticket together. Robinhood calls this linking widgets. OKX calls the list Favourites.
 - Alerts.
 
-Layouts are saved. Kraken ships Classic and Advanced presets and lets the person drag panels, with up to four charts. OKX allows up to ten chart workspaces and can hide the order panel so the chart fills the screen. Robinhood Legend allows several layouts and templates, and up to eight charts. The first frame Intafaced draws is one chart. The finished desktop can hold several charts and more than one saved layout.
+Layouts are saved. Kraken ships Classic and Advanced presets and lets the person drag panels, with up to four charts. OKX allows up to ten chart workspaces and can hide the order panel so the chart fills the screen. Robinhood Legend allows several layouts and templates, and up to eight charts. The first frame Intafaced draws is one chart. The finished desktop can hold several charts and more than one saved layout. The competitor counts are what those products ship. They are not a cap on Intafaced.
 
 The phone uses the same market, the same drawings, and the same indicator set. The stack is chart, then ticket, then book. Landscape and full screen belong to the desk. OKX also lets the chart sit at the top, the bottom, or be hidden. That choice is a view setting.
 
@@ -124,9 +148,9 @@ The chart has jobs. The engine is a separate rule, stated at the end of this sec
 
 Jobs, for the finished desk:
 
-- Type: line, candlestick, and Heikin Ashi. Robinhood Legend names those types.
+- Type: line, candlestick, and Heikin Ashi. Robinhood Legend names those types. More types can be added later. This list is the start, not a ceiling.
 - Interval: from one minute through a month. OKX's candlestick page also includes a time chart and landscape.
-- Indicators, and a saved set the person can apply again. The starter set is moving average, volume, VWAP, RSI, MACD, and Bollinger. Coinbase says its TradingView chart has many more. The desk can hold more sets later. An agent does not invent a list of a hundred indicators in the first frame.
+- Indicators, and a saved set the person can apply again. The starter set is moving average, volume, VWAP, RSI, MACD, and Bollinger. Coinbase says its TradingView chart has many more. The desk can hold more sets. An agent does not invent a list of a hundred indicators in the first frame, and does not refuse a set later because it was not in the starter list.
 - Drawings: a trendline, a level, and the shapes OKX names (rectangle and the rest). Drawings and indicator sets sync between phone and desktop. OKX syncs drawings and says candle colors do not sync. Intafaced syncs the up-and-down color as well, because it is an account setting, not a per-device scribble.
 - Compare a second market on the same chart.
 - A countdown on the current candle. Optional news marks. Each can be hidden.
@@ -145,6 +169,7 @@ One View section, opened from the person menu or from the desk. These settings c
 - Light, dark, or match the phone. OKX and Kraken both offer this. The choice of brand color is not this setting and is not made in this file.
 - Which color means up. Green up and red down is the default. The person can reverse it. OKX's candlestick page is the source. The choice follows the account onto every screen.
 - Where the daily candle starts: a 24-hour clock, or a chosen time zone. OKX offers UTC, UTC+8, and 24-hour.
+- Language. The product already has it. OKX puts it in preferences. It lives here.
 - Where the chart sits on the phone: top, bottom, or hidden.
 - What the chart draws: open orders, position, stop, liquidation, old fills, news. Each can be off.
 - Confirm before send. Confirm before cancel. Futures also have a cooling-off switch that blocks new futures trades for a chosen time. OKX documents that switch.
@@ -153,80 +178,81 @@ One View section, opened from the person menu or from the desk. These settings c
 
 ## Pay
 
-Personal Pay is Strike. From Strike's own send, receive, and limits pages:
+Personal Pay is how a person moves money, taken from Strike, plus the person-to-person market the product already has.
 
-- Send to a name, and request.
+- Send to a name, and request. Coinbase's own send article also lets a person pay from a Pay tab by contact or address. Same job.
 - Receive, and choose whether it stays in the asset or converts.
-- A repeat buy lives on the holding, which is Money, and is the same idea as Strike's recurring buy.
-- Bill pay and sending to a bank account abroad are rooms inside Pay for the finished app. Strike's limits page lists both. They are not built yet. They are not doors.
-- Lightning and on-chain receive are the chain. They stay out until the owner says the chain starts. The structure has a place for them inside Pay. The product does not build them now.
+- Person-to-person (`/p2p`). Offers, orders, and the chat on an order. `/ctc` redirects to `/p2p`. It is the same room, not a second product. A Personal account sees this. It is not hidden behind Business.
+- Bill pay, and sending to a bank account abroad. Strike's limits page lists both. They are rooms inside Pay for the finished app. They are not built yet. They are not doors. They are not optional extras to be dropped because the page is missing.
+- Lightning and on-chain receive are the chain. They stay out of the menu until the owner says the chain starts. The structure has a place for them inside Pay. The product does not build them in the first build. The place stays reserved so a later agent does not invent a new door for them.
 
 Business Pay is the merchant desk. It appears only in the Business account.
 
-- Links, checkout, customers, payouts, settlements, and disputes.
-- Sub-merchants and permissions. These routes exist today. They stay in this desk.
-- Invoices and subscriptions.
+- The merchant's own balance (`/pay/money`). Personal holdings stay on Money.
+- Links (`/pay/links`), checkout (`/pay/checkout`), payments (`/pay/payments`), customers, payouts, settlements (`/pay/settlements`), and disputes.
+- The merchant home (`/pay/merchant`), sub-merchants (`/pay/network`), and permissions (`/pay/permissions`). These routes exist today.
+- Invoices and subscriptions. Not built as their own pages yet. They still belong here. Strike Business is the reason a business can run payments. The product plan already includes billing.
 - Reports. Strike Business's own announcement says a business can export activity for accounting.
 - A developer test mode: keys and webhooks that cannot move live money. Strike's business signup page says the API is an extra verification, not a separate app.
 
-A person who is not a business never sees this list.
+A person who is not on a Business account never sees the merchant list. They still see send, receive, and person-to-person.
 
 ## More
 
-Rooms that are real and are not on the main bar. OKX puts Earn and the longer list under Explore, reached from the bottom of the app, not from the trade ticket. Same idea here.
+Rooms that are real and are not on the main bar. OKX puts the longer list under Explore, reached from the bottom of the app, not from the trade ticket. Same idea here.
 
 - Academy.
 - Agents.
-- Quant.
-- Launch.
-- Market.
-- Prediction markets.
-- Mining.
-- Token.
-- Blueprint.
-- Support.
-
-Copy and bots are listed here as well as inside Trade.
+- Quant, including the studio (`/quant/studio`) and backtest (`/quant/backtest`). The sandbox entry is `/quant`.
+- Launch (`/launch`). Innovation orders under the account belong to this room.
+- Market, the catalogue (`/market`) and the person's own listings (`/market/mine`).
+- Prediction markets (`/predict`).
+- Mining (`/mining`).
+- Token (`/token`). This is the token room. It is not the display-currency setting in View.
+- Blueprint (`/blueprint`).
+- Support (`/support`).
+- Copy and bots, also inside Trade.
+- Campaigns that are signed-in activity rather than the public front. The public campaign URLs are listed with the front door.
 
 ## What Intafaced has that those five do not
 
-These stay. They are not dropped because a competitor has no room with that name.
+These stay. They are not dropped because a competitor has no room with that name, and they are not dropped because the page is thin.
 
 - One ledger. No funding account and no trading account. Views only.
-- The bank behind Money: spaces, loans, cards, ramps, analytics, business accounts.
-- The team door: kill-switches, launch sequence, jurisdiction, ledger, operator tools.
+- The bank behind Money: spaces, loans, cards, ramps, analytics, business bank accounts.
+- The team door: kill-switches, launch sequence, jurisdiction, ledger, operator tools, and `/ops`.
 - Jurisdiction as a real constraint. A missing tier says so. It does not invent a permission.
-- Honest empty. A missing price, a missing balance, and an unbuilt custody screen say what is missing. A banner does not make a made-up number allowed.
-- The parked chain. The decentralized exchange, the protocol, and self-custody are pages that can exist and are not in the menu.
-- Academy, agents, blueprint, quant, launch, mining, prediction markets, token, and the market catalogue.
+- Honest empty. A missing price, a missing balance, an unbuilt custody screen, and an unconnected card issuer say what is missing. A banner does not make a made-up number allowed.
+- The parked chain. The decentralized exchange (`/dex`), the protocol (`/protocol`), and the chain (`/chain`), including self-custody, can keep their URLs and stay out of the menu until the owner says that work starts.
+- Academy, agents, blueprint, quant, launch, mining, prediction markets, token, execution, and the market catalogue.
 
 ## Left out, and why
 
 - Kraken's three apps. One product. The simple app is Money plus a simple chart. Pro is Trade. Krak's job, paying a person, is Pay.
 - OKX's old switch between a Lite app and a Pro app. OKX's own preferences page says the current app no longer has it.
-- OKX Wallet, DEX trader mode, and on-chain stock tokens. Those are the self-custody and chain surface. They wait.
+- OKX Wallet, DEX trader mode, and on-chain stock tokens. Those are the self-custody and chain surface. The URLs can exist. They are not customer doors until the chain starts.
 - Strike Private as a screen. It is a service, not a mode.
 - A social feed on the chart.
 - A second chart product on the phone.
 - A copied TradingView in the public repository.
 - Brand colors, type, and a taste lock. Not this file.
 - Two books of money.
+- A customer door named Platform. Search and the four doors replace that index.
+- A whitepaper page. There is no paper to serve.
 
 ## First build
 
-Draw only the shell with these four doors, the exchange desk, and the Bank overview. Pay's merchant desk, the extra trade modes, More, and the team frames come after those three are accepted.
-
-Sample numbers exist only inside Paper Design, and they are marked as samples. The product never shows an invented balance. In this company, "paper" alone means simulated trading. The practice switch on the desk is called simulated. It cannot move ledger money. Paper Design is the design tool, not that switch.
+Draw only the shell with these four doors, the exchange desk, and the Bank overview. The merchant desk, the extra trade modes, More, and the team frames come after those three are accepted. Naming them here is what makes the later build possible. It is not permission to build them in the first pass.
 
 ## Sources
 
-Read 2 October 2026, from the companies themselves.
+Read 2 October 2026, from the companies themselves. Intafaced routes were read from `vendor/upstream-exchange/05_Web_Front/src/config/routes.js` on `origin/main` at `0a587a3d`.
 
 - OKX, "How do I set up the commonly used transaction features?": account mode, position mode, interface, up and down colors, chart position, cooling-off. `https://www.okx.com/help/trading-settings-faq`
 - OKX, "How do I use and adjust the candlestick chart?": chart settings, trading display, order book, drawings, TradingView as a chart display, options charts unsupported. `https://www.okx.com/help/candlestick-faqs-and-settings`
 - OKX, "How do I use the chart trading layout?": up to ten workspaces, hide the order panel, chart position on the app. `https://www.okx.com/help/how-do-i-use-the-chart-trading-layout`
-- OKX, "How do I set my preferences?": theme, display currency, liquidation price, and the note that Lite and Pro can no longer be switched. `https://www.okx.com/en-us/help/preferences-faq`
-- OKX, "Getting started with Simple Earn": Explore, then Grow, for earn products. `https://www.okx.com/help/getting-started-with-coins`
+- OKX, "How do I set my preferences?": theme, display currency, language, liquidation price, and the note that Lite and Pro can no longer be switched. `https://www.okx.com/en-us/help/preferences-faq`
+- OKX, "Getting started with Simple Earn": Explore, then Grow, for earn products. Intafaced keeps earn on Money. `https://www.okx.com/help/getting-started-with-coins`
 - OKX, "How do I conduct spot trading?": Trade, then Spot, funding account to trading account. The transfer is theirs. Intafaced does not copy it. `https://www.okx.com/help/cryptocurrency-trading-app-web`
 - Strike, "How do I create an account?": Personal or Business, switch without logout. `https://strike.me/support/how-do-i-create-an-account/`
 - Strike, "What are my transaction limits?": personal and business limits, pending unavailable to send, Bill Pay, Send Globally, Strike Private for large orders. `https://strike.me/faq/what-are-my-limits/`
