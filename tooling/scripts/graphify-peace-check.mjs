@@ -109,8 +109,8 @@ else ok('.graphifyignore present');
 if (!existsSync(AGENTS)) fail('AGENTS.md missing');
 else {
   const text = readFileSync(AGENTS, 'utf8');
-  if (!text.includes('graphify query')) fail('AGENTS.md lost the query-first rule');
-  else ok('AGENTS.md still says query first');
+  if (text.includes('graphify query')) fail('AGENTS.md still tells agents to query the map');
+  else ok('AGENTS.md does not tell agents to query the map');
 }
 
 if (which.status === 0 && existsSync(GRAPH)) {
