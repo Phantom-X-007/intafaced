@@ -80,9 +80,9 @@ LOOK/BOTH PRs cannot merge without Codex crop-true on that SHA (1440 and 390 fil
 
 WCAG 2.2 AA is the target. Axe does not certify it. Named AT claims need route, fixture, browser, AT+version, viewport, named task, expected vs observed. 320 CSS px + 400% reflow; 24×24 targets.
 
-## Graphify
+## Look files
 
-`services/` and `packages/` only. Vendor Vue is not in the graph — open the Vue file. Do not commit graphify-out on a product PR.
+Open the Vue file. Leave `graphify-out/` out of a product pull request.
 
 ## Stop
 
