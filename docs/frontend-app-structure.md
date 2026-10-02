@@ -25,7 +25,17 @@ Open, and not to be invented by an agent:
 
 Nitro named the companies. OKX weighs more than the others when they disagree. Strike is the model for a person moving money. Robinhood, Coinbase, and Kraken are the model for a calm home and a professional desk on the same account.
 
-Pages were read from each company's own help or site on 2 October 2026. A news recap was not used as a source. Where a page failed, the same article was opened on another address of that company. Rooms that come from Intafaced itself say so. They are not dressed up as a competitor feature.
+Pages were read from each company's own help, product site, store listing, or official account on 2 October 2026. A news recap was not used as a source. The live phone apps were not installed. Where a current official page describes the screen, that page is the evidence. Where a page failed, the same article was opened on another address of that company. Rooms that come from Intafaced itself say so. They are not dressed up as a competitor feature.
+
+## What a later session can trust
+
+Checked again on 2 October 2026, against the products, not only the first help pass.
+
+- **OKX.** The beginner's guide, updated 15 September 2026, still says the app opens on Home, Trade is a bottom destination, and Assets is the bottom-right corner. Inside Assets, Portfolio shows funding, trading, earn, loan, and pay as buckets of one login. Intafaced keeps earn on Money and pay on Pay, and does not split the ledger into a funding account and a trading account. The US download page calls the same product "The New Money App" and says the portfolio, the watchlist, and orders sync across phone, web, and desktop. A September 2026 article that claimed a Simple / Exchange / Web3 switch is not used. Its cited post was deleted, and OKX's own preferences page says the Lite / Pro switch is gone.
+- **Strike.** The live product pages, not the 2023 blog alone, are the source for the three relationships. Individual is one platform: buy, borrow, get paid, pay bills, send. Business is one business account: treasury, borrow, accept payments, pay bills. Private is concierge on that same company: a relationship manager, a large order handled off the public book, limits set per account, and reports. Strike's own account, 29 July 2026, says moving between personal and business is one tap and no logout, on web, Android, and iOS. The Google Play listing updated 22 September 2026 still describes that app: buy and sell, direct deposit, target orders, chart widgets, and borrowing. A different company named Strike Finance ships a perpetuals app. It is not this Strike.
+- **Robinhood.** The current help page "Using advanced charts" says the phone chart is opened on the asset, then Advanced. It is not a second app. Indicator sets sync with Legend. Robinhood's own account, 26 June 2026, says price and indicator alerts roll out on Legend and on the phone charts. Robinhood's own newsroom, 29 September 2026, says Social is in the US app and is coming to Legend as a widget. Social stays out of this structure. The same note says foldable phones and tablets get a wider layout of the same app. That is a way to draw the shell, not a new door.
+- **Coinbase.** The current send article still says the phone send starts on a Pay tab. Advanced remains a desk on the same account: chart, depth, book, ticket, open orders. The Base app's Home, Social, Trade, and Wallet tabs belong to a different, self-custody app. They are not the Intafaced customer bar. The old Coinbase Pro phone article is stale. Pro was replaced by Advanced. Do not follow it.
+- **Kraken.** The app guide updated 3 August 2026 still lists the calm phone as Home, Portfolio, Explore, Activity, and a plus button to buy, sell, and convert. Account sits in the corner. Kraken Pro's own guide, updated 1 October 2026, is still the widget desk, with Classic and Advanced layouts. The apps page updated 11 August 2026 still lists Kraken, Kraken Pro, Krak, and a separate Kraken Wallet. Intafaced keeps one product. A Kraken blog on 10 July 2026 said a rebuilt consumer app was coming and not yet the documented app. The August pages still describe the tabs above, so that rebuild is not the structure to copy. On-chain tokens inside the Kraken app, announced 18 June 2026, stay out until the owner says the chain starts.
 
 ## Words that look alike
 
@@ -52,7 +62,7 @@ That is the mode Intafaced uses. It is one product and one look. It is not a fif
 
 ## Private
 
-Strike Private is the model, and it is part of this structure. Strike's own announcement (5 October 2023) describes it as a service for a select set of clients: high-net-worth individuals, businesses, family offices, and institutions. They use the same Strike product. What they gain is no ordinary purchase cap, a price set for them, and Strike's own people for the large buy or sell, for education, and for reading the market. A private client reaches those people at a published address. Strike's help center shows that split: everyone else uses the help center, and a private customer writes to their account manager. Strike's limits page sends orders above its published large-order line to that same desk. Those dollar lines are Strike's. This file does not copy a number across. Intafaced does not invent a cutoff.
+Strike Private is the model, and it is part of this structure. Strike's live Private page, read 2 October 2026, calls it concierge for size: a dedicated relationship manager, a large order executed off the public book, limits set per account rather than by a public tier, a custom rate, a person for the loan, and reports an accountant can export. The 5 October 2023 announcement names who it is for: high-net-worth individuals, businesses, family offices, and institutions. They use the same Strike product. Getting in is a conversation, then a relationship manager. It is not a tab. Strike's help center shows the split: everyone else uses the help center, and a private customer writes to their account manager. Strike's published dollar lines are Strike's. This file does not copy a number across. Intafaced does not invent a cutoff.
 
 Private sits on the account the client already has. A person can be Private. A business can be Private. The team opens it. There is no self-serve switch in the tab bar, and there is no fifth door.
 
@@ -82,7 +92,7 @@ One product. Four customer doors.
 
 Search sits in the bar on every door. It is not a fifth door. The old platform index (`/platform`) is not a customer door. It is a live probe of what each module can do today. The team can open it. Customers find rooms through the four doors and through search.
 
-The phone stacks the same four doors. A later phone item, not a door, is a home-screen price and a pay button. Strike and OKX both offer a phone widget of that kind. A social feed on the chart stays out. Robinhood has one. It is not part of this structure.
+The phone stacks the same four doors. A later phone item, not a door, is a home-screen price and a pay button. Strike's own widget page lists a price chart, a buy action, and pay-with-cash or pay-with-bitcoin, currently on iPhone. OKX documents a home-screen price widget and a floating position widget. Robinhood's own newsroom, 29 September 2026, says a foldable phone or a tablet may show two panes of the same app. That wider drawing is part of the shell frame. It does not add a door. A social feed on the chart stays out. Robinhood's same newsroom says Social is already in the US app and is coming to the desktop desk as a widget. It was seen. It is not part of this structure.
 
 The public front sits in front of the doors. It is not a fifth product. It holds home (`/`, `/index`), sign-in (`/login`), create account (`/register`, `/reg`), password recovery (`/findPwd`), help (`/help`, `/helplist`, `/helpdetail`), notices (`/notice`; `/announcement` redirects there), about (`/about-us`), invite (`/invite`), the app download (`/app`), partner (`/partner`), and campaigns (`/lab`, `/lab/detail/:id`, `/bzb`). Campaigns are public activity pages. They are not doors. There is no whitepaper route. The old one pointed at a file the repo does not have.
 
@@ -290,3 +300,17 @@ Read 2 October 2026, from the companies themselves. Intafaced routes were read f
 - Robinhood, "Widgets in Robinhood Legend": chart, indicators, drawings, ladder, options chain. `https://robinhood.com/us/en/support/articles/widgets-in-robinhood-legend/`
 - Robinhood, "Options chain": calls one side, puts the other, strike in the middle. `https://robinhood.com/us/en/support/articles/options-chain/`
 - Robinhood newsroom, "Introducing Robinhood Legend Charts on Mobile" (17 June 2025): the phone chart matches the desktop, including drawings. `https://robinhood.com/us/en/newsroom/introducing-robinhood-legend-charts-on-mobile/`
+- Robinhood, "Using advanced charts": on the phone, open the asset, then Advanced. Indicator sets sync with Legend. `https://robinhood.com/us/en/support/articles/using-advanced-charts/`
+- Robinhood newsroom, "HOOD Summit 2026" (29 September 2026): Social in the US app, a Legend widget coming, foldable and tablet layouts of the same app. Social is not adopted. `https://robinhood.com/us/en/newsroom/hood-summit-2026`
+- Robinhood's own account, 26 June 2026: price and indicator alerts on Legend and on the phone charts.
+- OKX, "OKX Beginner's Guide," updated 15 September 2026: Home, Trade, Assets, and the portfolio buckets. `https://www.okx.com/help/okx-beginners-guide`
+- OKX US download page, read 2 October 2026: one account across phone, web, and desktop. `https://www.okx.com/en-us/download`
+- Strike, "Private," read 2 October 2026: relationship manager, size execution, limits per account, reports. `https://strike.me/private`
+- Strike, "Individual" and "Business," read 2 October 2026. `https://strike.me/individual` and `https://strike.me/business`
+- Strike's own account, 29 July 2026: personal and business switch in one tap, no logout, on web, Android, and iOS.
+- Strike, "How do I add price or payment widgets": iPhone widgets for price, buy, and pay. `https://strike.me/faq/how-do-i-add-price-or-payment-widgets-to-my-home-or-lock-screen`
+- Google Play, "STRIKE: Buy & Hold Bitcoin," updated 22 September 2026. Not Strike Finance.
+- Kraken Support, "Navigating the Kraken app," updated 3 August 2026. `https://support.kraken.com/articles/360059154531-navigating-the-kraken-app`
+- Kraken Support, "Kraken's official mobile apps," updated 11 August 2026. `https://support.kraken.com/articles/360001332083-kraken-s-official-mobile-apps`
+- Kraken Blog, "Coming soon: bringing Kraken to life," 10 July 2026: a rebuilt consumer app announced, not the documented tabs. `https://blog.kraken.com/news/new-kraken-app-coming-soon`
+- Kraken Blog, "On-chain token trading is now built into the Kraken app," 18 June 2026. Not adopted while the chain is parked.
