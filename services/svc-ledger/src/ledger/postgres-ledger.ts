@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import {
@@ -8,6 +7,7 @@ import {
   assertIdempotencyKey,
   assertValidPost,
   formatAmount,
+  hashTx,
   signedDelta,
   InsufficientFundsError,
   LedgerError,
@@ -520,31 +520,4 @@ interface EntryRow {
   balance_after: string;
 }
 
-/**
- * Canonical transaction hash — byte-identical to the reference implementation's.
- * That equality is the point: the same transaction must hash the same in
- * TypeScript, in Postgres, and in any future Rust port.
- */
-export function hashTx(
-  tx: { id: string; module: string; reason: string; postedAt: Date; entries: readonly PostedEntry[] },
-  previousHash: string | null,
-): string {
-  const canonical = JSON.stringify({
-    id: tx.id,
-    module: tx.module,
-    reason: tx.reason,
-    postedAt: tx.postedAt.toISOString(),
-    entries: tx.entries.map((e) => ({
-      accountId: e.accountId,
-      assetId: e.assetId,
-      direction: e.direction,
-      amount: formatAmount(e.amount),
-    })),
-  });
-
-  return createHash('sha256')
-    .update(previousHash ?? '')
-    .update(' ')
-    .update(canonical)
-    .digest('hex');
-}
+export { hashTx };
