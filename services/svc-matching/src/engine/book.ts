@@ -800,12 +800,19 @@ export class OrderBook {
     const surveillanceCases: EngineSurveillanceCase[] = [];
     let remaining = order.qty;
 
-    matchLevels: while (remaining > ZERO && opposite.length > 0) {
-      const level = opposite[0] as PriceLevel;
+    const slicedThisTake = new Set<string>();
+
+    matchLevels: for (let levelIndex = 0; remaining > ZERO && levelIndex < opposite.length;) {
+      const level = opposite[levelIndex] as PriceLevel;
       if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
 
+      let levelDone = false;
       while (remaining > ZERO && level.orders.length > 0) {
         const maker = level.orders[0] as RestingOrder;
+        if (slicedThisTake.has(maker.orderId)) {
+          levelDone = true;
+          break;
+        }
 
         if (!stpIdentityPresent(order.accountId) || !stpIdentityPresent(maker.accountId)) {
           break matchLevels;
@@ -822,7 +829,7 @@ export class OrderBook {
           level.orders.shift();
           this.index.delete(maker.orderId);
           if (level.orders.length === 0) {
-            opposite.shift();
+            opposite.splice(levelIndex, 1);
             continue matchLevels;
           }
           continue;
@@ -858,13 +865,21 @@ export class OrderBook {
           this.index.delete(maker.orderId);
         } else if (maker.displayRemaining === ZERO && maker.displayPeak !== null) {
           maker.displayRemaining = refillDisplay(maker.displayPeak, maker.remaining);
+          slicedThisTake.add(maker.orderId);
           level.orders.shift();
           level.orders.push(maker);
-          if (level.orders.length === 1) break matchLevels;
         }
       }
 
-      if (level.orders.length === 0) opposite.shift();
+      if (level.orders.length === 0) {
+        opposite.splice(levelIndex, 1);
+        continue;
+      }
+      if (levelDone) {
+        levelIndex += 1;
+        continue;
+      }
+      break;
     }
 
     return { fills, remaining, cancellations, surveillanceCases };
