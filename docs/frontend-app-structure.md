@@ -12,7 +12,7 @@ The first screens to draw are only these three: the shell, the exchange desk, an
 
 ## What is decided, and what is open
 
-Decided here: the doors, which account sees which rooms, the trading desk, the chart's jobs, the view settings, where every current URL sits, and which company or product rule each choice came from.
+Decided here: the doors, which account sees which rooms, Private as a relationship on Personal or Business, the trading desk, the chart's jobs, the view settings, where every current URL sits, and which company or product rule each choice came from.
 
 Open, and not to be invented by an agent:
 
@@ -38,6 +38,7 @@ Use these meanings. Do not mix them.
 - **Market.** The catalogue in More, where listings are browsed.
 - **A market inside Trade.** One pair on the desk. Picking it updates the chart, the book, and the ticket.
 - **Earn.** A bank room on Money. It does not also live in More. OKX puts earning products under Explore. Intafaced keeps them with the balance, because that is where a person looks for yield on money they already hold.
+- **Private.** A relationship on a Personal account or a Business account. Same doors, same look, same ledger. A named person at Intafaced for large orders. Not a third account and not a door.
 - **Paper.** In this company, the word alone means simulated trading. The practice switch on the desk is called **simulated**. **Paper Design** is the design tool. Sample numbers exist only inside Paper Design, and they are marked as samples.
 
 ## Personal and Business
@@ -49,7 +50,24 @@ That is the mode Intafaced uses. It is one product and one look. It is not a fif
 - **Personal** is the default. Money, Trade, Pay as send, receive, and person-to-person, and More.
 - **Business** is the company account on the same login. Switching to it reveals the merchant desk inside Pay, and the business-bank tab is the natural landing inside Money for that account.
 
-Strike Private is not this. Strike's own announcement describes a white-glove service for large clients: a person, custom pricing, and an email to the private desk. It is not a third screen. Intafaced does not add a Private mode. A large-client service can exist later as a relationship, not as a menu.
+## Private
+
+Strike Private is the model, and it is part of this structure. Strike's own announcement (5 October 2023) describes it as a service for a select set of clients: high-net-worth individuals, businesses, family offices, and institutions. They use the same Strike product. What they gain is no ordinary purchase cap, a price set for them, and Strike's own people for the large buy or sell, for education, and for reading the market. A private client reaches those people at a published address. Strike's help center shows that split: everyone else uses the help center, and a private customer writes to their account manager. Strike's limits page sends orders above its published large-order line to that same desk. Those dollar lines are Strike's. This file does not copy a number across. Intafaced does not invent a cutoff.
+
+Private sits on the account the client already has. A person can be Private. A business can be Private. The team opens it. There is no self-serve switch in the tab bar, and there is no fifth door.
+
+What a private client sees, in the same app:
+
+- The same four doors, the same desk, and the same ledger.
+- Their account manager in the person menu and in Help. Help for everyone else stays the help center. Help for a private client also shows that person, the way Strike's own help page splits the two.
+- A large buy or sell can go through that person as well as through the desk. The price on the screen is the price the desk gave. The screen does not invent one.
+- The ordinary caps do not apply to that account. The cap that does apply is the one the team set for that client. A blank cap refuses the order. It does not guess a limit.
+
+What Private does not do:
+
+- It does not open the chain, self-custody, or Lightning. Strike includes those in the private relationship. Intafaced keeps them parked until the owner says the chain starts. A private client can be told that the chain is not open. Private is not a side door into it.
+- It does not add a third look, a third app, or a second book of money.
+- The team door gains one control: who is private, and who their manager is. Customers never see that list.
 
 ## The spine
 
@@ -231,7 +249,7 @@ These stay. They are not dropped because a competitor has no room with that name
 - Kraken's three apps. One product. The simple app is Money plus a simple chart. Pro is Trade. Krak's job, paying a person, is Pay.
 - OKX's old switch between a Lite app and a Pro app. OKX's own preferences page says the current app no longer has it.
 - OKX Wallet, DEX trader mode, and on-chain stock tokens. Those are the self-custody and chain surface. The URLs can exist. They are not customer doors until the chain starts.
-- Strike Private as a screen. It is a service, not a mode.
+- Strike Private as a fifth door or a third account. It is a relationship on Personal or Business, specified above.
 - A social feed on the chart.
 - A second chart product on the phone.
 - A copied TradingView in the public repository.
