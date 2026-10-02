@@ -1,6 +1,21 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { MoneyError, DECIMALS, SCALE, add, div, formatAmount, mul, mulBps, parseAmount, proRata, sub, sum, type Amount } from './money.js';
+import {
+  MoneyError,
+  DECIMALS,
+  MAX_AMOUNT,
+  SCALE,
+  add,
+  div,
+  formatAmount,
+  mul,
+  mulBps,
+  parseAmount,
+  proRata,
+  sub,
+  sum,
+  type Amount,
+} from './money.js';
 
 /**
  * THE MONEY PRIMITIVES, ARGUED WITH INSTEAD OF SAMPLED.
@@ -25,15 +40,14 @@ import { MoneyError, DECIMALS, SCALE, add, div, formatAmount, mul, mulBps, parse
 /**
  * Amounts across the range the book actually holds.
  *
- * `numeric(38,18)` gives 20 integer digits, so the generator spans 10^20 scaled
- * units and both signs — deliberately including values far larger than any real
- * balance, because an invariant that only holds for small numbers is an
- * invariant waiting for a whale.
+ * `numeric(38,18)` gives 20 integer digits. The generator stops at the
+ * largest scaled unit that column can store. 10^38 scaled is 10^20 exactly,
+ * one integer digit past the column, and parseAmount refuses it.
  */
-const anyAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: -(10n ** 38n), max: 10n ** 38n });
+const anyAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: -MAX_AMOUNT, max: MAX_AMOUNT });
 
 /** Non-negative amounts, for the properties that only make sense on a credit. */
-const positiveAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: 0n, max: 10n ** 38n });
+const positiveAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: 0n, max: MAX_AMOUNT });
 
 /**
  * Weights, INCLUDING zero ones. `proRata` refuses a non-positive *total*
