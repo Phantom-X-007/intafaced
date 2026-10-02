@@ -134,7 +134,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Vendor' });
     await fund(MAKER, 'USDT', '200');
 
-    const result = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const result = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -164,7 +165,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Payroll' });
     await fund(MAKER, 'USDT', '1000');
 
-    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -195,6 +197,97 @@ describe('maker/checker dual control with ledger holds', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
+  it('a settle that dies after the row is approved finishes on the next approve', async () => {
+    const account = await bank.business.createAccount({
+      name: 'Ops Co',
+      assetId: 'USDT',
+      spendThreshold: amt('100'),
+      creatorUserId: MAKER,
+    });
+    await bank.business.addMember({
+      accountId: account.id,
+      actorUserId: MAKER,
+      userId: CHECKER,
+      role: 'checker',
+    });
+    const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+    const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Payroll' });
+    await fund(MAKER, 'USDT', '1000');
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
+      accountId: account.id,
+      makerUserId: MAKER,
+      fromSpaceId: primary.id,
+      toSpaceId: pot.id,
+      amount: amt('250'),
+    });
+    if (proposed.kind !== 'pending') throw new Error('expected pending');
+
+    const orig = ledger.post.bind(ledger);
+    let failSettle = true;
+    ledger.post = (async (req: Parameters<MemoryLedger['post']>[0]) => {
+      if (failSettle && req.idempotencyKey.startsWith('bank.business.settle:')) {
+        failSettle = false;
+        throw new Error('settle down');
+      }
+      return orig(req);
+    }) as MemoryLedger['post'];
+
+    await expect(bank.business.approve({ approvalId: proposed.approval.id, checkerUserId: CHECKER })).rejects.toThrow(/settle down/);
+    expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('0');
+
+    const posted = await bank.business.approve({ approvalId: proposed.approval.id, checkerUserId: CHECKER });
+    expect(posted.ledgerTxId).toBeTruthy();
+    expect(await availableOf(MAKER, 'USDT')).toBe('750');
+    expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('250');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('a release that dies after reject returns the hold on the next reject', async () => {
+    const account = await bank.business.createAccount({
+      name: 'Ops Co',
+      assetId: 'USDT',
+      spendThreshold: amt('100'),
+      creatorUserId: MAKER,
+    });
+    await bank.business.addMember({
+      accountId: account.id,
+      actorUserId: MAKER,
+      userId: CHECKER,
+      role: 'checker',
+    });
+    const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+    const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Payroll' });
+    await fund(MAKER, 'USDT', '1000');
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
+      accountId: account.id,
+      makerUserId: MAKER,
+      fromSpaceId: primary.id,
+      toSpaceId: pot.id,
+      amount: amt('250'),
+    });
+    if (proposed.kind !== 'pending') throw new Error('expected pending');
+
+    const orig = ledger.post.bind(ledger);
+    let failRelease = true;
+    ledger.post = (async (req: Parameters<MemoryLedger['post']>[0]) => {
+      if (failRelease && req.idempotencyKey.startsWith('bank.business.release:')) {
+        failRelease = false;
+        throw new Error('release down');
+      }
+      return orig(req);
+    }) as MemoryLedger['post'];
+
+    await expect(bank.business.reject({ approvalId: proposed.approval.id, checkerUserId: CHECKER })).rejects.toThrow(/release down/);
+    expect(await availableOf(MAKER, 'USDT')).toBe('750');
+
+    await bank.business.reject({ approvalId: proposed.approval.id, checkerUserId: CHECKER });
+    expect(await availableOf(MAKER, 'USDT')).toBe('1000');
+    expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('0');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
   it('held funds cannot be double-spent while pending', async () => {
     const account = await bank.business.createAccount({
       name: 'Ops Co',
@@ -213,7 +306,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const other = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'B' });
     await fund(MAKER, 'USDT', '100');
 
-    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -254,7 +348,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
     await fund(MAKER, 'USDT', '100');
 
-    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -281,7 +376,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Y' });
     await fund(MAKER, 'USDT', '80');
 
-    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -409,7 +505,8 @@ describe('maker/checker dual control with ledger holds', () => {
     const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
     await fund(MAKER, 'USDT', '100');
-    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
+    const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,

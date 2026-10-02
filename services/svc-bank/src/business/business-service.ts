@@ -340,6 +340,15 @@ export class BusinessService {
         // Re-drive: settle key is approval id; row already closed.
         return { transferId: approval.transferId ?? approval.id, ledgerTxId: approval.ledgerTxId };
       }
+      if (approval.status === 'approved') {
+        // The row was claimed and the settle post did not land. The settle
+        // key is the approval id, so this retry posts once.
+        if (approval.makerUserId === input.checkerUserId) {
+          throw new BankError('Maker cannot approve their own transfer', 'bank.business_self_approve');
+        }
+        await this.assertRole(approval.accountId, input.checkerUserId, ['admin', 'checker']);
+        return this.finishSettle(approval);
+      }
       if (approval.status !== 'pending') {
         throw new BankError(`Approval ${approval.id} is ${approval.status}`, 'bank.business_approval_inactive');
       }
@@ -364,28 +373,20 @@ export class BusinessService {
         throw new BankError(`Approval ${approval.id} is no longer pending`, 'bank.business_approval_inactive');
       }
 
-      const from = await this.spaces.get(approval.fromSpaceId);
-      const to = await this.spaces.resolveForCredit(approval.toSpaceId);
-      const settled = await this.ledger.post(
-        recipes.businessApprovalSettle({
-          approvalId: approval.id,
-          from: accountForSpace(from),
-          to: accountForSpace(to),
-          amount: approval.amount,
-        }),
-      );
-
-      await this.sql`
-          UPDATE bank.business_approvals
-             SET ledger_tx_id = ${settled.id}
-           WHERE id = ${approval.id}::uuid
-        `;
-      return { transferId: approval.id, ledgerTxId: settled.id };
+      return this.finishSettle(approval);
     });
   }
 
   async reject(input: { approvalId: string; checkerUserId: string }): Promise<void> {
     const approval = await this.approval(input.approvalId);
+    if (approval.status === 'rejected' || approval.status === 'cancelled') {
+      if (approval.makerUserId === input.checkerUserId) {
+        throw new BankError('Maker cannot reject their own transfer as checker', 'bank.business_self_approve');
+      }
+      await this.assertRole(approval.accountId, input.checkerUserId, ['admin', 'checker']);
+      await this.releaseHold(approval);
+      return;
+    }
     if (approval.status !== 'pending') {
       throw new BankError(`Approval ${approval.id} is ${approval.status}`, 'bank.business_approval_inactive');
     }
@@ -406,6 +407,15 @@ export class BusinessService {
    */
   async cancel(input: { approvalId: string; actorUserId: string }): Promise<void> {
     const approval = await this.approval(input.approvalId);
+    if (approval.status === 'cancelled' || approval.status === 'rejected') {
+      if (approval.makerUserId === input.actorUserId) {
+        await this.assertMember(approval.accountId, input.actorUserId);
+      } else {
+        await this.assertRole(approval.accountId, input.actorUserId, ['admin']);
+      }
+      await this.releaseHold(approval);
+      return;
+    }
     if (approval.status !== 'pending') {
       throw new BankError(`Approval ${approval.id} is ${approval.status}`, 'bank.business_approval_inactive');
     }
@@ -603,6 +613,31 @@ export class BusinessService {
       throw new BankError(`Approval ${approval.id} is no longer pending`, 'bank.business_approval_inactive');
     }
 
+    await this.releaseHold(approval);
+  }
+
+  /** Settle key is the approval id. A second call returns the posted tx. */
+  private async finishSettle(approval: BusinessApproval): Promise<{ transferId: string; ledgerTxId: string }> {
+    const from = await this.spaces.get(approval.fromSpaceId);
+    const to = await this.spaces.resolveForCredit(approval.toSpaceId);
+    const settled = await this.ledger.post(
+      recipes.businessApprovalSettle({
+        approvalId: approval.id,
+        from: accountForSpace(from),
+        to: accountForSpace(to),
+        amount: approval.amount,
+      }),
+    );
+    await this.sql`
+        UPDATE bank.business_approvals
+           SET ledger_tx_id = ${settled.id}
+         WHERE id = ${approval.id}::uuid
+      `;
+    return { transferId: approval.id, ledgerTxId: settled.id };
+  }
+
+  /** Release key is the approval id. A second call does not pay the hold twice. */
+  private async releaseHold(approval: BusinessApproval): Promise<void> {
     const from = await this.spaces.get(approval.fromSpaceId);
     await this.ledger.post(
       recipes.businessApprovalRelease({
