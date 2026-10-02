@@ -22,6 +22,16 @@ describe('parse / format round trip', () => {
     expect(() => parseAmount(tooPrecise)).toThrow(MoneyError);
   });
 
+  it('refuses one unit past numeric(38,18) and keeps the largest amount that fits', () => {
+    const fits = `${'9'.repeat(20)}.${'9'.repeat(DECIMALS)}`;
+    expect(formatAmount(parseAmount(fits))).toBe(fits);
+    expect(formatAmount(parseAmount(`-${fits}`))).toBe(`-${fits}`);
+    expect(() => parseAmount('100000000000000000000')).toThrow(MoneyError);
+    expect(() => parseAmount('-100000000000000000000')).toThrow(MoneyError);
+    expect(() => parseAmount(10n ** 38n)).toThrow(MoneyError);
+    expect(() => parseAmount(-(10n ** 38n))).toThrow(MoneyError);
+  });
+
   it('refuses anything that is not a decimal string', () => {
     for (const bad of ['', 'abc', '1e18', '1,000', '0x10', '1.2.3', ' 1 2 ']) {
       expect(() => parseAmount(bad), bad).toThrow(MoneyError);

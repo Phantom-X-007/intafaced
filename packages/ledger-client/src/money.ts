@@ -13,6 +13,12 @@
 
 export const DECIMALS = 18;
 export const SCALE = 10n ** BigInt(DECIMALS);
+/**
+ * Largest magnitude `numeric(38,18)` can store, in scaled units.
+ * 20 nines before the point and 18 after. 10^38 scaled is 10^20 exactly,
+ * which is one integer digit past that column.
+ */
+export const MAX_AMOUNT: Amount = 10n ** 38n - 1n;
 
 /** A decimal string as it crosses a service boundary, e.g. "1234.5". */
 export type AmountString = string;
@@ -29,9 +35,18 @@ export class MoneyError extends Error {
   }
 }
 
+function fitsColumn(value: Amount): void {
+  if (value > MAX_AMOUNT || value < -MAX_AMOUNT) {
+    throw new MoneyError(`Amount does not fit numeric(38,18)`);
+  }
+}
+
 /** Parse a decimal string into the scaled bigint. Rejects anything lossy. */
 export function parseAmount(input: AmountString | Amount): Amount {
-  if (typeof input === 'bigint') return input;
+  if (typeof input === 'bigint') {
+    fitsColumn(input);
+    return input;
+  }
   if (typeof input !== 'string') throw new MoneyError(`Amount must be a decimal string, got ${typeof input}`);
 
   const trimmed = input.trim();
@@ -45,7 +60,9 @@ export function parseAmount(input: AmountString | Amount): Amount {
 
   const padded = frac.padEnd(DECIMALS, '0');
   const value = BigInt(whole ?? '0') * SCALE + BigInt(padded || '0');
-  return sign === '-' ? -value : value;
+  const signed = sign === '-' ? -value : value;
+  fitsColumn(signed);
+  return signed;
 }
 
 /** Canonical decimal string: no trailing zeros, no exponent, "0" for zero. */
