@@ -419,7 +419,7 @@ function create(branch) {
     console.log('· copied .env');
   }
 
-  refreshGraphIfStale(path);
+  // Graphify is not part of the workflow. Do not refresh the map on create.
 
   // REPORT THE BASE. A worktree cut 38 commits stale looks identical to a fresh
   // one, and on 2026-08-09 one was only caught because an agent had been told to
