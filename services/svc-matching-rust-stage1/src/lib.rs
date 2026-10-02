@@ -91,6 +91,20 @@ impl Book {
         let opposite = if side == "buy" { &mut self.asks } else if side == "sell" { &mut self.bids } else { return Err(format!("invalid side: {side}")); };
         let crossing = |p: u128| if side == "buy" { price >= p } else { price <= p };
         let mut remaining = qty;
+        // A fill-or-kill that cannot finish must not take a slice. The walk
+        // below mutates makers as it goes, so the size is checked first.
+        if order.tif == "FOK" {
+            let mut cover = 0u128;
+            for maker in opposite.iter() {
+                let maker_price = parse_amount(maker.order.price.as_ref().unwrap()).unwrap();
+                if !crossing(maker_price) { break; }
+                cover = cover.saturating_add(maker.remaining);
+                if cover >= qty { break; }
+            }
+            if cover < qty {
+                return Ok(());
+            }
+        }
         while remaining > 0 && !opposite.is_empty() && crossing(parse_amount(opposite[0].order.price.as_ref().unwrap()).unwrap()) {
             let maker_price = parse_amount(opposite[0].order.price.as_ref().unwrap()).unwrap();
             let traded = remaining.min(opposite[0].remaining);
@@ -159,4 +173,41 @@ mod tests {
 
     #[test]
     fn ready_harness_is_explicit() { assert_eq!(ready(), "ready"); }
+
+    fn limit(id: &str, side: &str, qty: &str, tif: &str) -> Order {
+        Order {
+            orderId: id.into(),
+            accountId: "desk".into(),
+            kind: "limit".into(),
+            side: side.into(),
+            qty: qty.into(),
+            price: Some("100".into()),
+            stopPrice: None,
+            tif: tif.into(),
+        }
+    }
+
+    #[test]
+    fn fok_that_cannot_fill_leaves_the_book_unchanged() {
+        let mut book = Book { market: "BTC/USDT".into(), ..Book::default() };
+        book.submit(limit("ask", "sell", "5", "GTC")).unwrap();
+        let before = book.state();
+        book.submit(limit("buy", "buy", "10", "FOK")).unwrap();
+        let after = book.state();
+        assert_eq!(after.asks.len(), 1);
+        assert_eq!(after.asks[0].orders[0].remaining, before.asks[0].orders[0].remaining);
+        assert_eq!(after.bids.len(), 0);
+        assert_eq!(after.lastTradePrice, None);
+    }
+
+    #[test]
+    fn fok_that_can_fill_takes_the_maker() {
+        let mut book = Book { market: "BTC/USDT".into(), ..Book::default() };
+        book.submit(limit("ask", "sell", "5", "GTC")).unwrap();
+        book.submit(limit("buy", "buy", "5", "FOK")).unwrap();
+        let state = book.state();
+        assert!(state.asks.is_empty());
+        assert!(state.bids.is_empty());
+        assert_eq!(state.lastTradePrice.as_deref(), Some("100"));
+    }
 }
