@@ -34,6 +34,8 @@ Spend the session on the product. `/grill-with-docs` may add one `GLOSSARY.md` e
 
 Coordination map, not a permission system: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
 
+Other companies' screens, for looking: [`docs/references/interface-overview.md`](docs/references/interface-overview.md).
+
 ## Skills
 
 Use the installed skills. This file wins where a skill says to wait for a person, wait for CI, or use `git worktree add`.
