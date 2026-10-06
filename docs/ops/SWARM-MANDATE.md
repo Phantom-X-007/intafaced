@@ -87,7 +87,7 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **Main CI no-cancel**                          | `ci.yml`: `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. Every merge to main is allowed to finish CI (public Actions free). PR branches still cancel superseding runs. **Not a merge throttle** — unlimited parallel ship stays. |
 | **Red tip = one heal lane**                    | Claim `main-heal` / `blocked-main`; one fix PR; no competing heal PRs; no product merges onto red tip. Path-disjoint craft may continue in worktrees. Full text: `CONTRIBUTING.md` §1.                                                          |
 | **Coordination PR ban**                        | No PR whose sole job is R07/peace/cycle/FREEZE tip-bump/claims meter/status. Those stay files; ship only with a real product/law delta.                                                                                                         |
-| `pnpm swarm:status` ops-churn / Actions 24h    | Informational counts only — the repo is public, so Actions are free and unlimited                                                                                                                                                               |
+| `pnpm swarm:status` ops-churn / Actions 24h    | Informational counts only — the bill is zero, parallel work stays, a 403 or 429 is a stop                                                                                                                                                       |
 | `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                                                                                                                     |
 
 Self-test (fixtures, no network): `pnpm value-gate:self-test`.
@@ -114,8 +114,8 @@ When the primary board finish is met but the session continues (AFK / “never s
 
 ### AFK PR law (mandatory)
 
-**There is no PR budget and no Actions budget.** The repo is public; Actions on standard runners
-are free and unlimited. Old spend thrift was **deleted 2026-08-07**
+**There is no PR budget and no Actions budget.** The bill is zero; parallel work stays; a 403 or
+429 is a stop. Old spend thrift was **deleted 2026-08-07**
 (retirement: [`../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md)).
 **Finished work is never held back for CI cost.** No caps, no cooling window, no override flags.
 GitHub is the **merge seal**, not the chat log.

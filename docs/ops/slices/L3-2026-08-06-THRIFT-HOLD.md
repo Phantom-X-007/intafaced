@@ -2,8 +2,8 @@
 
 **Status:** VOID as a hold. **Updated 2026-08-09.**
 
-Actions thrift was **deleted 2026-08-07**. The repo is public; GitHub Actions on standard
-runners are free and unlimited. There is no cooling window, no run-count cap, no `THRIFT_ALLOW`.
+Actions thrift was **deleted 2026-08-07**. There is no cooling window, no run-count cap, no
+`THRIFT_ALLOW`. The bill is still zero, parallel pull requests stay, and a 403 or 429 is a stop.
 
 **Do not wait.** Open the PR when the unit is done. One concern per PR (reviewability, not cost).
 

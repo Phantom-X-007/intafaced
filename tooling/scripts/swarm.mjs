@@ -1019,7 +1019,7 @@ function renderFreezeMd(m) {
       .map(([n, c]) => `${n}=${c}`)
       .join(', ');
     lines.push(
-      `- **Actions runs (24h):** ${m.actionsRuns24h.total}${by ? ` (${by})` : ''} — informational only; the repo is public, so Actions are free and unlimited`,
+      `- **Actions runs (24h):** ${m.actionsRuns24h.total}${by ? ` (${by})` : ''} — informational only; the bill is zero, a 403 or 429 is a stop`,
     );
   } else {
     lines.push('- **Actions runs (24h):** (gh unavailable — re-run with network)');

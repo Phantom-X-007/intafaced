@@ -5,8 +5,8 @@ on:
   #
   # It was removed on 2026-08-04 as a thrift measure, to stop "double-billing"
   # a merge out of "a 2,000-minute monthly pool". That pool was a private-repo
-  # quota. This repo is PUBLIC, and GitHub Actions on standard runners are free
-  # and unlimited for public repositories — the bill it protected does not exist.
+  # quota. This repo is public — the bill is zero — but free runners are not
+  # permission to ignore a 403 or 429 from GitHub; that is a stop.
   #
   # What it cost while it was off: nothing verified main after a merge. Two PRs
   # that each passed independently could land and leave the trunk red, on a repo
@@ -42,8 +42,8 @@ on:
 #   runs before they finished. Intermediate tips never got a real green/red
 #   signal; defects landed via cancelled post-merge checks (worked example:
 #   #1466 → cancelled main CI → brand-scan red tip → fleet freeze → #1471).
-#   Actions are free on this public repo — finishing every main run is the
-#   point of push:main, not a cost trade.
+#   The bill is zero on a public repo — finishing every main run is the point
+#   of push:main, not a cost trade. A 403 or 429 is still a stop.
 # - On PR refs, still cancel: force-push / tip-bump on one branch supersedes
 #   the prior run. That is the only legitimate thrift leftover.
 #
