@@ -199,7 +199,7 @@ Run the same thing locally before pushing. It is **required** — not to save an
 pnpm verify    # build · typecheck · test · DoD gate
 ```
 
-**No CI budget, no throttle.** This repo is public and GitHub Actions on standard runners are free and unlimited for it. Open the PR when the unit is done; never sit on finished work to keep a run count down. There is no PR cap and no review gate on how many you open. (Old Actions spend thrift deleted 2026-08-07 — [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).) Coordination-only PRs stay banned for noise, not cost.
+**No CI spend budget, no spend throttle.** Standard GitHub-hosted runner minutes have a zero bill on this public repo; service limits and acceptable-use rules still apply. Open the PR when the unit is done; parallel pull requests stay. There is no PR cap and no review gate on how many you open. A 403 or 429 from GitHub is a stop: report the response and keep independent local work moving. Follow [`AGENT_PROTOCOL.md`](tooling/agent-protocol/AGENT_PROTOCOL.md) §3 for cooldowns and access restrictions. Honor required branch-protection checks. The old throttle stays deleted — [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Coordination-only PRs stay banned for noise, not cost.
 
 Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 
