@@ -23,3 +23,4 @@ export * from './action-approval.js';
 export * from './outreach-crm.js';
 export * from './account-controls.js';
 export * from './operation-identity-decisions.js';
+export * from './operation-identity-client.js';
