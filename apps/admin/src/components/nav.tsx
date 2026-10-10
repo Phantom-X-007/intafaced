@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const ROUTES = [
+  { href: '/crm', label: 'CRM' },
+  { href: '/accounts', label: 'Account controls' },
   { href: '/', label: 'Kill-switches' },
   { href: '/launch', label: 'Launch sequence' },
   { href: '/jurisdiction', label: 'Jurisdiction' },
