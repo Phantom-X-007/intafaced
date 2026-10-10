@@ -88,8 +88,9 @@ docker compose -f docker-compose.apps.yml -f docker-compose.outreach.yml up -d -
 The overlay requires the existing ordered founder identities, distinct identity
 authority/admission keys with their exact service-side mappings, an OPS-owned
 database URL and positive pool size, the owner-reviewed CRM configuration,
-paired OPS/notify ingress keys, admin HTTPS session settings, an authenticated
-email gateway, and approved public contact/retention build values. These are
+one dedicated OPS-to-notify ingress key mapped to both service env names, admin
+HTTPS session settings, an authenticated email gateway, and approved public
+contact/retention build values. These are
 configuration inputs, not evidence that a host, founder identity, provider,
 domain, or delivery route has been verified.
 

@@ -52,7 +52,7 @@ services:
 
   svc-notify:
     environment:
-      NOTIFY_OPS_SERVICE_SECRET: ${NOTIFY_OPS_SERVICE_SECRET:?set the same dedicated ops-to-notify secret}
+      NOTIFY_OPS_SERVICE_SECRET: ${OPS_NOTIFY_SERVICE_SECRET:?set the dedicated ops-to-notify secret}
       NOTIFY_EMAIL_GATEWAY_URL: ${NOTIFY_EMAIL_GATEWAY_URL:?set a compatible authenticated email gateway URL}
       NOTIFY_EMAIL_GATEWAY_TOKEN: ${NOTIFY_EMAIL_GATEWAY_TOKEN:?set the gateway credential}
       NOTIFY_REQUIRED_CHANNELS: ${NOTIFY_REQUIRED_CHANNELS:?set required notification channels including email}
