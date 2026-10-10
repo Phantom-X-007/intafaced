@@ -1,3 +1,5 @@
+import * as workflow from '@intafaced/contracts';
+import { papermarkFreeAdapter } from './document-provider.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
@@ -31,17 +33,16 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
-    if (error instanceof OutreachError)
+    if (error instanceof OutreachError) {
+      let code: 'FORBIDDEN' | 'TOO_MANY_REQUESTS' | 'PRECONDITION_FAILED' = 'PRECONDITION_FAILED';
+      if (error.code === 'ops.crm.operator_forbidden') code = 'FORBIDDEN';
+      if (error.code === 'ops.crm.rate_limited') code = 'TOO_MANY_REQUESTS';
       throw new TRPCError({
-        code:
-          error.code === 'ops.crm.operator_forbidden'
-            ? 'FORBIDDEN'
-            : error.code === 'ops.crm.rate_limited'
-              ? 'TOO_MANY_REQUESTS'
-              : 'PRECONDITION_FAILED',
+        code,
         message: error.code,
         cause: error,
       });
+    }
     throw error;
   }
 }
@@ -71,6 +72,10 @@ export function createOutreachRouter(crm: OutreachCrm, authority: FounderAuthori
       .input(outreachQuestionnaireInputSchema)
       .output(outreachDraftSchema)
       .mutation(({ input, ctx }) => mapped(() => crm.answer(input, abuseKey(ctx)))),
+    addInterests: publicProcedure
+      .input(workflow.outreachAddInterestsInputSchema)
+      .output(outreachDraftSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.addInterests(input, abuseKey(ctx)))),
     listOpportunities: staffRead
       .input(crmListInputSchema)
       .output(crmOpportunityPageSchema)
@@ -91,8 +96,80 @@ export function createOutreachRouter(crm: OutreachCrm, authority: FounderAuthori
       .output(crmActivitySchema)
       .mutation(({ input, ctx }) => mapped(() => crm.addNote(input, ctx.principal!.userId))),
     owners: staffRead
-      .output(z.object({ ownerUserIds: z.array(z.string().uuid()).length(2), initialOwnerUserId: z.string().uuid() }).strict())
+      .output(
+        z
+          .object({
+            ownerUserIds: z.array(z.string().uuid()).length(2),
+            initialOwnerUserId: z.string().uuid(),
+            owners: z.tuple([
+              z.object({ userId: z.string().uuid(), displayName: z.literal('Nitro') }).strict(),
+              z.object({ userId: z.string().uuid(), displayName: z.literal('Phantom') }).strict(),
+            ]),
+          })
+          .strict(),
+      )
       .query(() => mapped(async () => crm.owners())),
+    listCampaigns: staffRead
+      .input(workflow.crmCampaignListInputSchema)
+      .output(workflow.crmCampaignPageSchema)
+      .query(({ input, ctx }) => mapped(() => crm.listCampaigns(input))),
+    upsertCampaign: staffWrite
+      .input(workflow.crmCampaignWriteInputSchema)
+      .output(workflow.crmCampaignSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.upsertCampaign(input, ctx.principal!.userId))),
+    listSourceMappings: staffRead
+      .input(workflow.crmSourceMappingListInputSchema)
+      .output(workflow.crmSourceMappingPageSchema)
+      .query(({ input, ctx }) => mapped(() => crm.listSourceMappings(input))),
+    upsertSourceMapping: staffWrite
+      .input(workflow.crmSourceMappingWriteInputSchema)
+      .output(workflow.crmSourceMappingSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.upsertSourceMapping(input, ctx.principal!.userId))),
+    metrics: staffRead
+      .input(workflow.crmMetricsInputSchema)
+      .output(workflow.crmMetricsSchema)
+      .query(({ input, ctx }) => mapped(() => crm.metrics(input))),
+    listDuplicates: staffRead
+      .input(workflow.crmDuplicateListInputSchema)
+      .output(workflow.crmDuplicatePageSchema)
+      .query(({ input, ctx }) => mapped(() => crm.listDuplicates(input))),
+    mergeContacts: staffWrite
+      .input(workflow.crmMergeInputSchema)
+      .output(workflow.crmMergeReceiptSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.mergeContacts(input, ctx.principal!.userId))),
+    getContactProvenance: staffRead
+      .input(workflow.crmContactProvenanceInputSchema)
+      .output(workflow.crmContactProvenanceSchema.nullable())
+      .query(({ input, ctx }) => mapped(() => crm.getContactProvenance(input))),
+    exportSubmissions: staffRead
+      .input(workflow.crmExportInputSchema)
+      .output(workflow.crmExportPageSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.exportSubmissions(input, ctx.principal!.userId))),
+    listTasks: staffRead
+      .input(workflow.crmTaskListInputSchema)
+      .output(workflow.crmTaskPageSchema)
+      .query(({ input, ctx }) => mapped(() => crm.listTasks(input))),
+    createTask: staffWrite
+      .input(workflow.crmTaskCreateInputSchema)
+      .output(workflow.crmTaskMutationReceiptSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.createTask(input, ctx.principal!.userId))),
+    transitionTask: staffWrite
+      .input(workflow.crmTaskTransitionInputSchema)
+      .output(workflow.crmTaskMutationReceiptSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.transitionTask(input, ctx.principal!.userId))),
+    recordInteraction: staffWrite
+      .input(workflow.crmInteractionInputSchema)
+      .output(workflow.crmInteractionReceiptSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.recordInteraction(input, ctx.principal!.userId))),
+    listWorkflowAudit: staffRead
+      .input(workflow.crmWorkflowAuditListInputSchema)
+      .output(workflow.crmWorkflowAuditPageSchema)
+      .query(({ input, ctx }) => mapped(() => crm.listWorkflowAudit(input))),
+    documentProviderStatus: staffRead.output(workflow.crmDocumentProviderStatusSchema).query(() => papermarkFreeAdapter.status()),
+    documentViews: staffRead
+      .input(workflow.crmDocumentProviderReadInputSchema)
+      .output(workflow.crmDocumentProviderReadResultSchema)
+      .query(({ input }) => papermarkFreeAdapter.readViews(input)),
     engagement: staffRead
       .output(z.object({ status: z.literal('disabled'), reason: z.literal('api_access_unavailable') }))
       .query(() => ({ status: 'disabled' as const, reason: 'api_access_unavailable' as const })),

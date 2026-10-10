@@ -64,4 +64,39 @@ describe('private CRM router authority boundary', () => {
     });
     expect(authority).not.toHaveBeenCalled();
   });
+  it('rechecks founder authority for exports, workflow reads and unavailable provider surfaces', async () => {
+    const crm = new OutreachCrm(null, null);
+    const exportRead = vi.spyOn(crm, 'exportSubmissions').mockRejectedValue(new OutreachError('ops.crm.storage_unconfigured'));
+    let enabled = true;
+    const authority = vi.fn(async () => {
+      if (!enabled) throw new OutreachError('ops.crm.operator_forbidden');
+      return userId;
+    });
+    const caller = createOutreachRouter(crm, authority).createCaller(context);
+    const request = { requestId: randomUUID(), limit: 1 };
+    await expect(caller.exportSubmissions(request)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(exportRead).toHaveBeenCalledWith(request, userId);
+    expect(await caller.documentProviderStatus()).toEqual({ status: 'disabled', reason: 'api_access_unavailable' });
+    expect(await caller.documentViews({ providerLinkId: 'document-link', limit: 10 })).toEqual({
+      status: 'unavailable',
+      reason: 'api_access_unavailable',
+    });
+    enabled = false;
+    for (const call of [
+      () => caller.exportSubmissions(request),
+      () => caller.metrics({}),
+      () => caller.listDuplicates({ limit: 10 }),
+      () => caller.listTasks({ limit: 10 }),
+      () => caller.listCampaigns({ limit: 10 }),
+      () => caller.listSourceMappings({ limit: 10 }),
+      () => caller.documentProviderStatus(),
+      () => caller.documentViews({ providerLinkId: 'document-link', limit: 10 }),
+      () => caller.getContactProvenance({ contactId: randomUUID() }),
+      () => caller.listWorkflowAudit({ subjectType: 'contact', subjectId: randomUUID(), limit: 10 }),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
+    expect(exportRead).toHaveBeenCalledOnce();
+    expect(authority).toHaveBeenCalledTimes(13);
+  });
 });

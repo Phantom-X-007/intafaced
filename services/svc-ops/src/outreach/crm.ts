@@ -1,5 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Sql } from 'postgres';
+import { z } from 'zod';
+import * as workflow from '@intafaced/contracts';
 import { transaction } from '@intafaced/db';
 import {
   crmActivitySchema,
@@ -15,6 +17,7 @@ import {
   crmSubmissionSchema,
   crmTaskSchema,
   outreachCaptureInputSchema,
+  outreachCaptureReceiptSchema,
   outreachContinuationInputSchema,
   outreachDraftSchema,
   outreachQuestionnaireInputSchema,
@@ -35,15 +38,41 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object')
     return `{${Object.entries(value)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => (a < b ? -1 : Number(a > b)))
       .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
       .join(',')}}`;
   return JSON.stringify(value) ?? 'null';
 }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const fingerprint = (value: unknown) => hash(canonical(value));
-function normalizeIds<T extends { requestId?: string; submissionId?: string; opportunityId?: string; ownerUserId?: string }>(input: T): T {
-  for (const field of ['requestId', 'submissionId', 'opportunityId', 'ownerUserId'] as const) {
+function normalizeIds<
+  T extends {
+    requestId?: string;
+    submissionId?: string;
+    opportunityId?: string;
+    ownerUserId?: string;
+    id?: string;
+    contactId?: string;
+    campaignId?: string;
+    sourceContactId?: string;
+    targetContactId?: string;
+    taskId?: string;
+    subjectId?: string;
+  },
+>(input: T): T {
+  for (const field of [
+    'requestId',
+    'submissionId',
+    'opportunityId',
+    'ownerUserId',
+    'id',
+    'contactId',
+    'campaignId',
+    'sourceContactId',
+    'targetContactId',
+    'taskId',
+    'subjectId',
+  ] as const) {
     const value = input[field];
     if (value !== undefined) input[field] = value.toLowerCase();
   }
@@ -107,7 +136,7 @@ export class OutreachCrm {
     operation: string,
     input: unknown,
     result: unknown,
-    submissionId: string,
+    submissionId: string | null,
   ): Promise<void> {
     await tx`INSERT INTO ops.crm_requests(request_id,actor_key,operation,fingerprint,result,submission_id)
       VALUES (${requestId},${actor},${operation},${fingerprint(input)},${tx.json(JSON.parse(JSON.stringify(result)))},${submissionId})`;
@@ -172,9 +201,10 @@ export class OutreachCrm {
         capturedAt: at,
         completedAt: null,
       });
-      // Untrusted source keys remain opaque hints. They establish neither campaign nor recipient identity.
+      // Resolve only an operator-configured campaign mapping; recipient linkage stays unknown.
+      const attribution = await this.captureAttribution(tx, input.sourceKey, at);
       await tx`INSERT INTO ops.crm_submissions(id,contact_id,capability_hash,expires_at,revision,record,original_contact,attribution)
-        VALUES (${submissionId},${contactId},${hash(input.continuationToken)},${expires},1,${tx.json(submission)},${tx.json(input.contact)},${tx.json({ sourceHint: input.sourceKey ?? null, recipientLinkage: 'unknown', campaign: null })})`;
+        VALUES (${submissionId},${contactId},${hash(input.continuationToken)},${expires},1,${tx.json(submission)},${tx.json(input.contact)},${this.json(tx, attribution)})`;
       const dueAt = nextReviewAt(this.now(), config);
       for (const audience of input.contact.interests) {
         const opportunity = crmOpportunitySchema.parse({
@@ -233,7 +263,7 @@ export class OutreachCrm {
         questionnaires,
         completedAt: questionnaires.length === old.contact.interests.length ? this.now().toISOString() : null,
       });
-      await tx`UPDATE ops.crm_submissions SET revision=${updated.revision},record=${tx.json(updated)} WHERE id=${row.id}`;
+      await tx`UPDATE ops.crm_submissions SET revision=${updated.revision},record=${tx.json(updated)},first_completed_at=COALESCE(first_completed_at,${updated.completedAt}::timestamptz) WHERE id=${row.id}`;
       const opportunities =
         await tx`SELECT record FROM ops.crm_opportunities WHERE submission_id=${row.id} AND audience=${input.questionnaire.audience} FOR UPDATE`;
       const opportunity = crmOpportunitySchema.parse(opportunities[0]?.record);
@@ -250,9 +280,72 @@ export class OutreachCrm {
       return draft;
     });
   }
-  owners(): { ownerUserIds: string[]; initialOwnerUserId: string } {
+  async addInterests(raw: workflow.OutreachAddInterestsInput, abuseKey: string) {
+    const input = normalizeIds(workflow.outreachAddInterestsInputSchema.parse(raw));
+    await this.publicRate(abuseKey);
+    return this.write(async (tx, config) => {
+      await this.lockRequest(tx, input.requestId);
+      // Serialize canonical-link creation against founder merges, before row locks.
+      await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.contact-merges'))`;
+      const row = await this.authenticate(tx, input);
+      const businessInput = { ...input, continuationToken: undefined };
+      const replay = await this.replay(tx, input.requestId, `prospect:${row.id}`, 'addInterests', businessInput);
+      if (replay !== null) return outreachDraftSchema.parse(replay);
+      const old = crmSubmissionSchema.parse(row.record);
+      if (old.revision !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      const additions = input.interests.filter((interest) => !old.contact.interests.includes(interest));
+      if (additions.length) {
+        const aliases = await tx`SELECT canonical_contact_id FROM ops.crm_contact_aliases WHERE contact_id=${row.contact_id}`;
+        const contactId = aliases[0] ? String(aliases[0].canonical_contact_id) : row.contact_id;
+        const originals = await tx`SELECT record FROM ops.crm_contacts WHERE id=${row.contact_id}`;
+        const organisationId = crmContactSchema.parse(originals[0]?.record).organisationIds[0] ?? null;
+        const at = this.now().toISOString();
+        for (const audience of additions) {
+          const opportunity = crmOpportunitySchema.parse({
+            id: randomUUID(),
+            contactId,
+            organisationId,
+            submissionId: row.id,
+            audience,
+            stage: 'new',
+            ownerUserId: config.initialOwnerUserId,
+            revision: 1,
+            nextAction: { description: 'Review enquiry', dueAt: nextReviewAt(this.now(), config) },
+            closedDisposition: null,
+            closingEvidenceRef: null,
+            createdAt: at,
+            updatedAt: at,
+            ...(audience === 'investor' ? { indicativeContribution: { status: 'undecided' } } : {}),
+          });
+          await tx`INSERT INTO ops.crm_opportunities(id,submission_id,contact_id,organisation_id,audience,stage,owner_user_id,revision,created_at,record)
+            VALUES (${opportunity.id},${row.id},${contactId},${organisationId},${audience},'new',${opportunity.ownerUserId},1,${at},${tx.json(opportunity)})`;
+          await this.task(tx, opportunity);
+          await this.activity(tx, opportunity.id, { kind: 'system', jobId: row.id }, 'assigned', null, config.initialOwnerUserId);
+        }
+        const updated = crmSubmissionSchema.parse({
+          ...old,
+          revision: old.revision + 1,
+          contact: { ...old.contact, interests: [...old.contact.interests, ...additions] },
+          completedAt: null,
+        });
+        await tx`UPDATE ops.crm_submissions SET revision=${updated.revision},record=${tx.json(updated)} WHERE id=${row.id}`;
+        row.record = updated;
+      }
+      const draft = this.draft(row);
+      await this.remember(tx, input.requestId, `prospect:${row.id}`, 'addInterests', businessInput, draft, row.id);
+      return draft;
+    });
+  }
+  owners() {
     const { config } = this.configured();
-    return { ownerUserIds: [...config.founders], initialOwnerUserId: config.initialOwnerUserId };
+    return {
+      ownerUserIds: [...config.founders],
+      initialOwnerUserId: config.initialOwnerUserId,
+      owners: [
+        { userId: config.founders[0]!, displayName: 'Nitro' as const },
+        { userId: config.founders[1]!, displayName: 'Phantom' as const },
+      ] as [{ userId: string; displayName: 'Nitro' }, { userId: string; displayName: 'Phantom' }],
+    };
   }
   async listOpportunities(raw: CrmListInput) {
     const input = normalizeIds(crmListInputSchema.parse(raw));
@@ -345,7 +438,11 @@ export class OutreachCrm {
         revision: old.revision + 1,
         updatedAt: this.now().toISOString(),
       });
-      await this.task(tx, row);
+      await this.task(tx, row, {
+        actor: actorUserId,
+        requestId: input.requestId,
+        reason: 'Founder reassigned the opportunity',
+      });
       await this.activity(tx, row.id, { kind: 'operator', userId: actorUserId }, 'assigned', null, input.ownerUserId);
       return row;
     });
@@ -365,8 +462,18 @@ export class OutreachCrm {
         revision: old.revision + 1,
         updatedAt: this.now().toISOString(),
       });
-      await this.task(tx, row);
+      await this.task(tx, row, {
+        actor: actorUserId,
+        requestId: input.requestId,
+        reason: input.reason,
+      });
       await this.activity(tx, row.id, { kind: 'operator', userId: actorUserId }, 'stage_changed', input.reason, input.requestId);
+      await this.audit(tx, actorUserId, input.requestId, 'opportunity', row.id, 'stage_changed', input.reason, {
+        from: old.stage,
+        to: row.stage,
+        revision: row.revision,
+        indicative: row.audience === 'investor' ? row.indicativeContribution : null,
+      });
       return row;
     });
   }
@@ -377,17 +484,559 @@ export class OutreachCrm {
       this.activity(tx, row.id, { kind: 'operator', userId: actorUserId }, 'note', input.note, input.requestId),
     );
   }
-  private async saveOpportunity(tx: Sql, raw: unknown): Promise<CrmOpportunity> {
-    const row = crmOpportunitySchema.parse(raw);
-    await tx`UPDATE ops.crm_opportunities SET stage=${row.stage},owner_user_id=${row.ownerUserId},revision=${row.revision},record=${tx.json(row)} WHERE id=${row.id}`;
+  private json(tx: Sql, value: unknown) {
+    return tx.json(JSON.parse(JSON.stringify(value)));
+  }
+  private async staffMutation<T>(
+    actor: string,
+    input: { requestId: string },
+    operation: string,
+    fn: (tx: Sql, config: OutreachConfig) => Promise<T>,
+  ): Promise<T> {
+    actor = uuidSchema.parse(actor).toLowerCase();
+    return this.write(async (tx, config) => {
+      if (!config.founders.includes(actor)) throw new OutreachError('ops.crm.operator_forbidden');
+      await this.lockRequest(tx, input.requestId);
+      const replay = await this.replay(tx, input.requestId, `operator:${actor}`, operation, input);
+      if (replay !== null) return replay as T;
+      const result = await fn(tx, config);
+      await this.remember(tx, input.requestId, `operator:${actor}`, operation, input, result, null);
+      return result;
+    });
+  }
+  private async audit(
+    tx: Sql,
+    actor: string,
+    requestId: string,
+    subjectType: z.infer<typeof workflow.crmWorkflowAuditSchema>['subjectType'],
+    subjectId: string,
+    kind: z.infer<typeof workflow.crmWorkflowAuditSchema>['kind'],
+    reason: string,
+    facts: Record<string, unknown>,
+  ) {
+    const row = workflow.crmWorkflowAuditSchema.parse({
+      id: randomUUID(),
+      requestId,
+      actorUserId: actor.toLowerCase(),
+      subjectType,
+      subjectId,
+      kind,
+      reason,
+      facts,
+      occurredAt: this.now().toISOString(),
+    });
+    await tx`INSERT INTO ops.crm_workflow_audit(id,request_id,actor_user_id,subject_type,subject_id,kind,occurred_at,record)
+      VALUES (${row.id},${requestId},${row.actorUserId},${subjectType},${subjectId},${kind},${row.occurredAt},${this.json(tx, row)})`;
     return row;
   }
-  private async task(tx: Sql, opportunity: CrmOpportunity): Promise<void> {
-    const previous = await tx`SELECT id,record FROM ops.crm_tasks WHERE opportunity_id=${opportunity.id} FOR UPDATE`;
+  private pageCursor(raw: string | undefined, scope: string): { at: string; id: string } | null {
+    if (!raw) return null;
+    try {
+      const value = cursorSchema
+        .extend({ scope: z.string().length(64) })
+        .strict()
+        .parse(JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')));
+      if (value.scope !== fingerprint(scope)) throw new Error('scope');
+      return { at: value.at, id: value.id.toLowerCase() };
+    } catch {
+      throw new OutreachError('ops.crm.cursor_invalid');
+    }
+  }
+  private nextCursor(at: string, id: string, scope: string) {
+    return Buffer.from(JSON.stringify({ at, id, scope: fingerprint(scope) })).toString('base64url');
+  }
+  private filterScope(input: Record<string, unknown>) {
+    const { requestId: _request, cursor: _cursor, limit: _limit, ...filters } = input;
+    return canonical(filters);
+  }
+  private attribution(raw: unknown, capturedAt: string) {
+    const value = z
+      .object({ sourceHint: z.string().nullable(), campaign: z.unknown().nullable(), recipientLinkage: z.literal('unknown') })
+      .passthrough()
+      .parse(raw);
+    return workflow.crmAttributionSchema.parse({
+      ...value,
+      sourceMappingId: value.sourceMappingId ?? null,
+      sourceMappingRevision: value.sourceMappingRevision ?? null,
+      capturedAt: value.capturedAt ?? capturedAt,
+    });
+  }
+  private async captureAttribution(tx: Sql, sourceKey: string | undefined, capturedAt: string) {
+    const rows = sourceKey
+      ? await tx`SELECT m.record AS mapping,c.record AS campaign FROM ops.crm_source_mappings m JOIN ops.crm_campaigns c ON c.id=m.campaign_id WHERE m.source_key=${sourceKey} AND m.status='active' FOR SHARE OF m,c`
+      : [];
+    const mapping = rows[0] ? workflow.crmSourceMappingSchema.parse(rows[0].mapping) : null;
+    const campaign = rows[0] ? workflow.crmCampaignSchema.parse(rows[0].campaign) : null;
+    const resolved = mapping && campaign?.status === 'active';
+    return workflow.crmAttributionSchema.parse({
+      sourceHint: sourceKey ?? null,
+      sourceMappingId: resolved ? mapping.id : null,
+      sourceMappingRevision: resolved ? mapping.revision : null,
+      campaign: resolved
+        ? {
+            id: campaign.id,
+            revision: campaign.revision,
+            name: campaign.name,
+            channel: campaign.channel,
+            documentRef: campaign.documentRef,
+            providerLinkId: campaign.providerLinkId,
+          }
+        : null,
+      recipientLinkage: 'unknown',
+      capturedAt,
+    });
+  }
+  async upsertCampaign(raw: z.infer<typeof workflow.crmCampaignWriteInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmCampaignWriteInputSchema.parse(raw));
+    return this.staffMutation(actor, input, 'upsertCampaign', async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.campaign:' || ${input.id}))`;
+      const found = await tx`SELECT record FROM ops.crm_campaigns WHERE id=${input.id} FOR UPDATE`;
+      const old = found[0] ? workflow.crmCampaignSchema.parse(found[0].record) : null;
+      if ((old?.revision ?? 0) !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      const at = this.now().toISOString();
+      const row = workflow.crmCampaignSchema.parse({
+        id: input.id,
+        revision: (old?.revision ?? 0) + 1,
+        name: input.name,
+        channel: input.channel,
+        status: input.status,
+        documentRef: input.documentRef,
+        providerLinkId: input.providerLinkId,
+        createdAt: old?.createdAt ?? at,
+        updatedAt: at,
+      });
+      await tx`INSERT INTO ops.crm_campaigns(id,revision,created_at,record) VALUES (${row.id},${row.revision},${row.createdAt},${this.json(tx, row)}) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,record=excluded.record`;
+      await this.audit(tx, actor, input.requestId, 'campaign', row.id, 'campaign_written', input.reason, { previous: old, current: row });
+      return row;
+    });
+  }
+  async upsertSourceMapping(raw: z.infer<typeof workflow.crmSourceMappingWriteInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmSourceMappingWriteInputSchema.parse(raw));
+    return this.staffMutation(actor, input, 'upsertSourceMapping', async (tx) => {
+      // Serialize both the unique public hint and staff mapping identity.
+      await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.source-mapping-writes'))`;
+      const campaign = await tx`SELECT id FROM ops.crm_campaigns WHERE id=${input.campaignId} FOR SHARE`;
+      if (!campaign[0]) throw new OutreachError('ops.crm.campaign_not_found');
+      const found = await tx`SELECT record FROM ops.crm_source_mappings WHERE id=${input.id} FOR UPDATE`;
+      const old = found[0] ? workflow.crmSourceMappingSchema.parse(found[0].record) : null;
+      if ((old?.revision ?? 0) !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      if (old && old.sourceKey !== input.sourceKey) throw new OutreachError('ops.crm.source_key_immutable');
+      const collision = await tx`SELECT id FROM ops.crm_source_mappings WHERE source_key=${input.sourceKey} AND id<>${input.id}`;
+      if (collision[0]) throw new OutreachError('ops.crm.source_key_conflict');
+      const at = this.now().toISOString();
+      const row = workflow.crmSourceMappingSchema.parse({
+        id: input.id,
+        revision: (old?.revision ?? 0) + 1,
+        sourceKey: input.sourceKey,
+        campaignId: input.campaignId,
+        status: input.status,
+        createdAt: old?.createdAt ?? at,
+        updatedAt: at,
+      });
+      await tx`INSERT INTO ops.crm_source_mappings(id,source_key,campaign_id,revision,status,created_at,record) VALUES (${row.id},${row.sourceKey},${row.campaignId},${row.revision},${row.status},${row.createdAt},${this.json(tx, row)}) ON CONFLICT(id) DO UPDATE SET campaign_id=excluded.campaign_id,revision=excluded.revision,status=excluded.status,record=excluded.record`;
+      await this.audit(tx, actor, input.requestId, 'source_mapping', row.id, 'source_mapping_written', input.reason, {
+        previous: old,
+        current: row,
+      });
+      return row;
+    });
+  }
+  async listCampaigns(raw: z.infer<typeof workflow.crmCampaignListInputSchema>) {
+    const input = workflow.crmCampaignListInputSchema.parse(raw),
+      scope = 'campaigns',
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows =
+        await tx`SELECT record FROM ops.crm_campaigns WHERE (${cursor?.at ?? null}::timestamptz IS NULL OR (created_at,id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((r) => workflow.crmCampaignSchema.parse(r.record)),
+        last = items.at(-1);
+      return workflow.crmCampaignPageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.createdAt, last.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
+  async listSourceMappings(raw: z.infer<typeof workflow.crmSourceMappingListInputSchema>) {
+    const input = normalizeIds(workflow.crmSourceMappingListInputSchema.parse(raw)),
+      scope = 'source-mappings:' + this.filterScope(input),
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows =
+        await tx`SELECT record FROM ops.crm_source_mappings WHERE (${input.campaignId ?? null}::uuid IS NULL OR campaign_id=${input.campaignId ?? null}::uuid) AND (${input.status ?? null}::text IS NULL OR status=${input.status ?? null}) AND (${cursor?.at ?? null}::timestamptz IS NULL OR (created_at,id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((r) => workflow.crmSourceMappingSchema.parse(r.record)),
+        last = items.at(-1);
+      return workflow.crmSourceMappingPageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.createdAt, last.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
+  async getContactProvenance(raw: z.infer<typeof workflow.crmContactProvenanceInputSchema>) {
+    const input = normalizeIds(workflow.crmContactProvenanceInputSchema.parse(raw));
+    return this.write(async (tx) => {
+      const original = await tx`SELECT record,revision FROM ops.crm_contacts WHERE id=${input.contactId}`;
+      if (!original[0]) return null;
+      const aliases = await tx`SELECT canonical_contact_id FROM ops.crm_contact_aliases WHERE contact_id=${input.contactId}`;
+      const canonicalId = aliases[0] ? String(aliases[0].canonical_contact_id) : input.contactId;
+      const canonicalRows = await tx`SELECT record,revision FROM ops.crm_contacts WHERE id=${canonicalId}`;
+      const sourceFilter = tx`SELECT attribution,record->>'capturedAt' AS captured_at,id FROM ops.crm_submissions WHERE (contact_id=${canonicalId} OR contact_id IN (SELECT contact_id FROM ops.crm_contact_aliases WHERE canonical_contact_id=${canonicalId})) AND attribution->'campaign' IS NOT NULL AND attribution->'campaign'<>'null'::jsonb`;
+      const firstRows = await tx`SELECT * FROM (${sourceFilter}) s ORDER BY captured_at::timestamptz,id LIMIT 1`;
+      const lastRows = await tx`SELECT * FROM (${sourceFilter}) s ORDER BY captured_at::timestamptz DESC,id DESC LIMIT 1`;
+      const first = firstRows[0],
+        last = lastRows[0];
+      return workflow.crmContactProvenanceSchema.parse({
+        originalContact: crmContactSchema.parse(original[0].record),
+        canonicalContact: crmContactSchema.parse(canonicalRows[0]?.record),
+        originalRevision: original[0].revision,
+        canonicalRevision: canonicalRows[0]?.revision,
+        firstKnownSource: first ? this.attribution(first.attribution, String(first.captured_at)) : null,
+        latestKnownSource: last ? this.attribution(last.attribution, String(last.captured_at)) : null,
+      });
+    }, 'repeatable read');
+  }
+  async exportSubmissions(raw: z.infer<typeof workflow.crmExportInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmExportInputSchema.parse(raw)),
+      scope = 'export:' + this.filterScope(input),
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.staffMutation(actor, input, 'exportSubmissions', async (tx) => {
+      const rows =
+        await tx`SELECT s.record,s.original_contact AS initial_contact,s.first_completed_at,s.attribution,c.record AS original_contact,k.record AS canonical_contact FROM ops.crm_submissions s JOIN ops.crm_contacts c ON c.id=s.contact_id LEFT JOIN ops.crm_contact_aliases a ON a.contact_id=c.id JOIN ops.crm_contacts k ON k.id=COALESCE(a.canonical_contact_id,c.id)
+        WHERE (${input.campaignId ?? null}::uuid IS NULL OR (s.attribution->'campaign'->>'id')::uuid=${input.campaignId ?? null}::uuid)
+        AND (${input.sourceKey ?? null}::text IS NULL OR s.attribution->>'sourceHint'=${input.sourceKey ?? null})
+        AND (${input.capturedFrom ?? null}::timestamptz IS NULL OR (s.record->>'capturedAt')::timestamptz>=${input.capturedFrom ?? null}::timestamptz)
+        AND (${input.capturedBefore ?? null}::timestamptz IS NULL OR (s.record->>'capturedAt')::timestamptz<${input.capturedBefore ?? null}::timestamptz)
+        AND EXISTS(SELECT 1 FROM ops.crm_opportunities o WHERE o.submission_id=s.id AND (${input.audience ?? null}::text IS NULL OR o.audience=${input.audience ?? null}) AND (${input.stage ?? null}::text IS NULL OR o.stage=${input.stage ?? null}) AND (${input.ownerUserId ?? null}::uuid IS NULL OR o.owner_user_id=${input.ownerUserId ?? null}::uuid))
+        AND (${cursor?.at ?? null}::timestamptz IS NULL OR ((s.record->>'capturedAt')::timestamptz,s.id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY (s.record->>'capturedAt')::timestamptz DESC,s.id DESC LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((r) => {
+          const submission = crmSubmissionSchema.parse(r.record);
+          return {
+            submission,
+            initialContact: r.initial_contact,
+            firstCompletedAt: r.first_completed_at ? new Date(r.first_completed_at).toISOString() : null,
+            originalContact: crmContactSchema.parse(r.original_contact),
+            canonicalContact: crmContactSchema.parse(r.canonical_contact),
+            attribution: this.attribution(r.attribution, submission.capturedAt),
+          };
+        }),
+        last = items.at(-1);
+      const page = workflow.crmExportPageSchema.parse({
+        exportId: randomUUID(),
+        generatedAt: this.now().toISOString(),
+        items,
+        nextCursor:
+          rows.length > input.limit && last ? this.nextCursor(last.submission.capturedAt, last.submission.submissionId, scope) : null,
+      });
+      await this.audit(
+        tx,
+        actor,
+        input.requestId,
+        'export',
+        page.exportId,
+        'export_generated',
+        'Founder requested a bounded original-submission export',
+        { filters: JSON.parse(this.filterScope(input)), rowCount: items.length, nextPageAvailable: page.nextCursor !== null },
+      );
+      return page;
+    });
+  }
+
+  async metrics(raw: z.infer<typeof workflow.crmMetricsInputSchema>) {
+    const input = normalizeIds(workflow.crmMetricsInputSchema.parse(raw));
+    return this.write(async (tx) => {
+      const observedAt = this.now().toISOString();
+      const filtered = tx`SELECT o.id,o.submission_id,o.contact_id,o.audience,o.stage,s.record AS submission,s.attribution FROM ops.crm_opportunities o JOIN ops.crm_submissions s ON s.id=o.submission_id
+        WHERE (${input.audience ?? null}::text IS NULL OR o.audience=${input.audience ?? null}) AND (${input.stage ?? null}::text IS NULL OR o.stage=${input.stage ?? null}) AND (${input.ownerUserId ?? null}::uuid IS NULL OR o.owner_user_id=${input.ownerUserId ?? null}::uuid)
+        AND (${input.campaignId ?? null}::uuid IS NULL OR (s.attribution->'campaign'->>'id')::uuid=${input.campaignId ?? null}::uuid) AND (${input.sourceKey ?? null}::text IS NULL OR s.attribution->>'sourceHint'=${input.sourceKey ?? null})
+        AND (${input.capturedFrom ?? null}::timestamptz IS NULL OR (s.record->>'capturedAt')::timestamptz>=${input.capturedFrom ?? null}::timestamptz) AND (${input.capturedBefore ?? null}::timestamptz IS NULL OR (s.record->>'capturedAt')::timestamptz<${input.capturedBefore ?? null}::timestamptz)`;
+      const totals =
+        await tx`WITH filtered AS (${filtered}) SELECT count(*)::int AS opportunities,count(DISTINCT submission_id)::int AS submissions,count(DISTINCT contact_id)::int AS contacts,count(DISTINCT submission_id) FILTER(WHERE submission->>'completedAt' IS NULL)::int AS incomplete,
+        (SELECT count(*)::int FROM ops.crm_tasks t JOIN filtered f ON f.id=t.opportunity_id WHERE t.status='pending' AND t.due_at<${observedAt}::timestamptz) AS overdue,
+        (SELECT count(*)::int FROM ops.crm_interactions i JOIN filtered f ON f.id=i.opportunity_id WHERE i.kind='call_invited') AS invitations,
+        (SELECT count(*)::int FROM ops.crm_interactions i JOIN filtered f ON f.id=i.opportunity_id WHERE i.kind='call_booked') AS bookings FROM filtered`;
+      const audiences =
+        await tx`WITH filtered AS (${filtered}) SELECT audience,count(*)::int AS count FROM filtered GROUP BY audience ORDER BY audience`;
+      const stages =
+        await tx`WITH filtered AS (${filtered}) SELECT audience,stage,count(*)::int AS count FROM filtered GROUP BY audience,stage ORDER BY audience,stage`;
+      const sources =
+        await tx`WITH filtered AS (${filtered}) SELECT attribution->>'sourceHint' AS source_key,attribution->'campaign'->>'id' AS campaign_id,count(*)::int AS count FROM filtered GROUP BY source_key,campaign_id ORDER BY count DESC,source_key NULLS LAST,campaign_id NULLS LAST LIMIT 201`;
+      const row = totals[0]!;
+      return workflow.crmMetricsSchema.parse({
+        observedAt,
+        totals: {
+          opportunities: row.opportunities,
+          submissions: row.submissions,
+          canonicalContacts: row.contacts,
+          incompleteSubmissions: row.incomplete,
+          overdueTasks: row.overdue,
+          manualCallInvitations: row.invitations,
+          manualCallBookings: row.bookings,
+        },
+        byAudience: audiences.map((r) => ({ audience: r.audience, count: r.count })),
+        byStage: stages.map((r) => ({ audience: r.audience, stage: r.stage, count: r.count })),
+        bySource: sources
+          .slice(0, 200)
+          .map((r) => ({ sourceKey: r.source_key ?? null, campaignId: r.campaign_id ?? null, count: r.count })),
+        sourceGroupsTruncated: sources.length > 200,
+      });
+    }, 'repeatable read');
+  }
+
+  async listDuplicates(raw: z.infer<typeof workflow.crmDuplicateListInputSchema>) {
+    const input = workflow.crmDuplicateListInputSchema.parse(raw),
+      scope = 'duplicates:' + this.filterScope(input),
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows = await tx`SELECT c.record,c.revision,
+        (SELECT count(*)::int FROM ops.crm_contacts d LEFT JOIN ops.crm_contact_aliases ad ON ad.contact_id=d.id WHERE ad.contact_id IS NULL AND lower(d.record->>'email')=lower(c.record->>'email')) AS matches
+        FROM ops.crm_contacts c LEFT JOIN ops.crm_contact_aliases a ON a.contact_id=c.id WHERE a.contact_id IS NULL
+        AND EXISTS(SELECT 1 FROM ops.crm_contacts d LEFT JOIN ops.crm_contact_aliases ad ON ad.contact_id=d.id WHERE ad.contact_id IS NULL AND d.id<>c.id AND lower(d.record->>'email')=lower(c.record->>'email'))
+        AND (${input.query ?? null}::text IS NULL OR strpos(lower(c.record->>'name'),lower(${input.query ?? ''}))>0 OR strpos(lower(c.record->>'email'),lower(${input.query ?? ''}))>0)
+        AND (${cursor?.at ?? null}::timestamptz IS NULL OR ((c.record->>'createdAt')::timestamptz,c.id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY (c.record->>'createdAt')::timestamptz DESC,c.id DESC LIMIT ${input.limit + 1}`;
+      const items = rows
+          .slice(0, input.limit)
+          .map((r) => ({ contact: crmContactSchema.parse(r.record), revision: r.revision, matchingUnmergedContactCount: r.matches })),
+        last = items.at(-1);
+      return workflow.crmDuplicatePageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.contact.createdAt, last.contact.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
+  async mergeContacts(raw: z.infer<typeof workflow.crmMergeInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmMergeInputSchema.parse(raw));
+    return this.staffMutation(actor, input, 'mergeContacts', async (tx) => {
+      // CRM merges are rare founder operations. This serializes graph changes,
+      // including opposing merges, without locking public submissions.
+      await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.contact-merges'))`;
+      const contacts =
+        await tx`SELECT id,revision,record FROM ops.crm_contacts WHERE id=ANY(${tx.array([input.sourceContactId, input.targetContactId].sort())}::uuid[]) ORDER BY id FOR UPDATE`;
+      const source = contacts.find((r) => r.id === input.sourceContactId),
+        target = contacts.find((r) => r.id === input.targetContactId);
+      if (!source || !target) throw new OutreachError('ops.crm.contact_not_found');
+      if (source.revision !== input.sourceExpectedRevision || target.revision !== input.targetExpectedRevision)
+        throw new OutreachError('ops.crm.revision_conflict');
+      const aliases =
+        await tx`SELECT contact_id FROM ops.crm_contact_aliases WHERE contact_id=ANY(${tx.array([input.sourceContactId, input.targetContactId])}::uuid[]) FOR UPDATE`;
+      if (aliases.some((r) => r.contact_id === input.sourceContactId)) throw new OutreachError('ops.crm.contact_already_merged');
+      if (aliases.some((r) => r.contact_id === input.targetContactId)) throw new OutreachError('ops.crm.canonical_target_required');
+      const sourceRecord = crmContactSchema.parse(source.record),
+        targetRecord = crmContactSchema.parse(target.record);
+      if (
+        sourceRecord.platformIdentity &&
+        targetRecord.platformIdentity &&
+        sourceRecord.platformIdentity.userId !== targetRecord.platformIdentity.userId
+      )
+        throw new OutreachError('ops.crm.identity_link_conflict');
+      const opportunities =
+        await tx`SELECT record FROM ops.crm_opportunities WHERE contact_id=${input.sourceContactId} ORDER BY id LIMIT 201 FOR UPDATE`;
+      if (opportunities.length > 200) throw new OutreachError('ops.crm.merge_too_large');
+      const at = this.now().toISOString();
+      // Original contacts, verification, organisation links and submission
+      // contact_id/answers never move. Only CRM opportunity linkage is canonical.
+      await tx`UPDATE ops.crm_contact_aliases SET canonical_contact_id=${input.targetContactId},updated_at=${at} WHERE canonical_contact_id=${input.sourceContactId}`;
+      await tx`INSERT INTO ops.crm_contact_aliases(contact_id,canonical_contact_id,created_at,updated_at) VALUES (${input.sourceContactId},${input.targetContactId},${at},${at})`;
+      await tx`UPDATE ops.crm_contacts SET revision=revision+1 WHERE id=ANY(${tx.array([input.sourceContactId, input.targetContactId])}::uuid[])`;
+      for (const result of opportunities) {
+        const old = crmOpportunitySchema.parse(result.record);
+        await this.saveOpportunity(tx, { ...old, contactId: input.targetContactId, revision: old.revision + 1, updatedAt: at });
+        await this.activity(tx, old.id, { kind: 'operator', userId: actor.toLowerCase() }, 'note', input.reason, input.requestId);
+      }
+      const receipt = workflow.crmMergeReceiptSchema.parse({
+        mergeId: randomUUID(),
+        sourceContactId: input.sourceContactId,
+        targetContactId: input.targetContactId,
+        sourceRevision: source.revision + 1,
+        targetRevision: target.revision + 1,
+        movedOpportunityCount: opportunities.length,
+        mergedAt: at,
+      });
+      await tx`INSERT INTO ops.crm_contact_merges(id,source_contact_id,target_contact_id,request_id,actor_user_id,merged_at,record) VALUES (${receipt.mergeId},${receipt.sourceContactId},${receipt.targetContactId},${input.requestId},${actor.toLowerCase()},${at},${this.json(tx, receipt)})`;
+      const facts = {
+        sourceContactId: receipt.sourceContactId,
+        targetContactId: receipt.targetContactId,
+        movedOpportunityCount: receipt.movedOpportunityCount,
+        mergeId: receipt.mergeId,
+      };
+      await this.audit(tx, actor, input.requestId, 'contact', input.sourceContactId, 'contacts_merged', input.reason, facts);
+      await this.audit(tx, actor, input.requestId, 'contact', input.targetContactId, 'contacts_merged', input.reason, facts);
+      return receipt;
+    });
+  }
+  async listWorkflowAudit(raw: z.infer<typeof workflow.crmWorkflowAuditListInputSchema>) {
+    const input = normalizeIds(workflow.crmWorkflowAuditListInputSchema.parse(raw)),
+      scope = 'workflow-audit:' + this.filterScope(input),
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows =
+        await tx`SELECT record FROM ops.crm_workflow_audit WHERE subject_type=${input.subjectType} AND subject_id=${input.subjectId} AND (${cursor?.at ?? null}::timestamptz IS NULL OR (occurred_at,id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY occurred_at DESC,id DESC LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((r) => workflow.crmWorkflowAuditSchema.parse(r.record)),
+        last = items.at(-1);
+      return workflow.crmWorkflowAuditPageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.occurredAt, last.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
+
+  private taskView(row: Record<string, unknown>) {
+    return workflow.crmWorkflowTaskSchema.parse({
+      task: crmTaskSchema.parse(row.record),
+      revision: row.revision,
+      kind: row.kind,
+      createdAt: row.created_at === null ? null : new Date(String(row.created_at)).toISOString(),
+    });
+  }
+  private async reviewedInvestor(tx: Sql, opportunity: CrmOpportunity) {
+    if (opportunity.audience !== 'investor') return;
+    const rows = await tx`SELECT record FROM ops.crm_submissions WHERE id=${opportunity.submissionId}`;
+    const submission = crmSubmissionSchema.parse(rows[0]?.record);
+    if (
+      !['qualified', 'diligence', 'terms'].includes(opportunity.stage) ||
+      !submission.questionnaires.some((q) => q.audience === 'investor')
+    )
+      throw new OutreachError('ops.crm.investor_review_required');
+  }
+  async listTasks(raw: z.infer<typeof workflow.crmTaskListInputSchema>) {
+    const input = normalizeIds(workflow.crmTaskListInputSchema.parse(raw)),
+      scope = 'tasks:' + this.filterScope(input),
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows =
+        await tx`SELECT * FROM ops.crm_tasks WHERE (${input.ownerUserId ?? null}::uuid IS NULL OR owner_user_id=${input.ownerUserId ?? null}::uuid) AND (${input.opportunityId ?? null}::uuid IS NULL OR opportunity_id=${input.opportunityId ?? null}::uuid) AND (${input.status ?? null}::text IS NULL OR status=${input.status ?? null}) AND (${input.dueBefore ?? null}::timestamptz IS NULL OR due_at<${input.dueBefore ?? null}::timestamptz)
+        AND (${cursor?.at ?? null}::timestamptz IS NULL OR (due_at,id)>(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) ORDER BY due_at,id LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((r) => this.taskView(r)),
+        last = items.at(-1);
+      return workflow.crmTaskPageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.task.dueAt, last.task.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
+  async createTask(raw: z.infer<typeof workflow.crmTaskCreateInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmTaskCreateInputSchema.parse(raw));
+    return this.mutate(actor, input, 'createTask', async (tx, old, config) => {
+      if (old.revision !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      if (old.stage === 'closed') throw new OutreachError('ops.crm.opportunity_closed');
+      if (!config.founders.includes(input.ownerUserId)) throw new OutreachError('ops.crm.owner_not_founder');
+      if (input.kind === 'call_invitation') await this.reviewedInvestor(tx, old);
+      const at = this.now().toISOString(),
+        task = crmTaskSchema.parse({
+          id: randomUUID(),
+          opportunityId: old.id,
+          ownerUserId: input.ownerUserId,
+          description: input.description,
+          dueAt: input.dueAt,
+          status: 'pending',
+          updatedAt: at,
+        });
+      await tx`INSERT INTO ops.crm_tasks(id,opportunity_id,record,revision,kind,created_at,due_at,owner_user_id,status) VALUES (${task.id},${old.id},${tx.json(task)},1,${input.kind},${at},${task.dueAt},${task.ownerUserId},'pending')`;
+      const opportunity = await this.saveOpportunity(tx, { ...old, revision: old.revision + 1, updatedAt: at });
+      const view = workflow.crmWorkflowTaskSchema.parse({ task, revision: 1, kind: input.kind, createdAt: at });
+      await this.audit(tx, actor, input.requestId, 'task', task.id, 'task_created', input.reason, { task: view, opportunityId: old.id });
+      return workflow.crmTaskMutationReceiptSchema.parse({ task: view, opportunity });
+    });
+  }
+  async transitionTask(raw: z.infer<typeof workflow.crmTaskTransitionInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmTaskTransitionInputSchema.parse(raw));
+    return this.mutate(actor, input, 'transitionTask', async (tx, old) => {
+      if (old.revision !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      const tasks = await tx`SELECT * FROM ops.crm_tasks WHERE id=${input.taskId} AND opportunity_id=${old.id} FOR UPDATE`;
+      if (!tasks[0]) throw new OutreachError('ops.crm.task_not_found');
+      const previous = this.taskView(tasks[0]);
+      if (previous.revision !== input.expectedTaskRevision) throw new OutreachError('ops.crm.revision_conflict');
+      if (previous.task.status !== 'pending') throw new OutreachError('ops.crm.task_not_pending');
+      if (previous.kind === 'next_action' && old.stage !== 'closed' && !input.replacementNextAction)
+        throw new OutreachError('ops.crm.next_action_required');
+      if (previous.kind !== 'next_action' && input.replacementNextAction) throw new OutreachError('ops.crm.replacement_not_primary');
+      const at = this.now().toISOString(),
+        task = crmTaskSchema.parse({ ...previous.task, status: input.status, updatedAt: at }),
+        revision = previous.revision + 1;
+      await tx`UPDATE ops.crm_tasks SET record=${tx.json(task)},status=${task.status},revision=${revision} WHERE id=${task.id}`;
+      const opportunity = await this.saveOpportunity(tx, {
+        ...old,
+        ...(previous.kind === 'next_action' && input.replacementNextAction ? { nextAction: input.replacementNextAction } : {}),
+        revision: old.revision + 1,
+        updatedAt: at,
+      });
+      if (previous.kind === 'next_action') await this.task(tx, opportunity, { actor, requestId: input.requestId, reason: input.reason });
+      const view = workflow.crmWorkflowTaskSchema.parse({ ...previous, task, revision });
+      await this.audit(tx, actor, input.requestId, 'task', task.id, 'task_transitioned', input.reason, {
+        from: previous.task.status,
+        to: task.status,
+        revision,
+        opportunityId: old.id,
+      });
+      return workflow.crmTaskMutationReceiptSchema.parse({ task: view, opportunity });
+    });
+  }
+  async recordInteraction(raw: z.infer<typeof workflow.crmInteractionInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmInteractionInputSchema.parse(raw));
+    return this.mutate(actor, input, 'recordInteraction', async (tx, old) => {
+      if (old.revision !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      if (old.stage === 'closed') throw new OutreachError('ops.crm.opportunity_closed');
+      if (input.kind === 'call_invited' || input.kind === 'call_booked') await this.reviewedInvestor(tx, old);
+      if (Date.parse(input.occurredAt) > this.now().getTime()) throw new OutreachError('ops.crm.interaction_in_future');
+      if (input.kind === 'call_booked' && Date.parse(input.scheduledAt) < Date.parse(input.occurredAt))
+        throw new OutreachError('ops.crm.call_schedule_invalid');
+      const existing =
+        await tx`SELECT id FROM ops.crm_interactions WHERE opportunity_id=${old.id} AND kind=${input.kind} AND record->>'evidenceRef'=${input.evidenceRef}`;
+      if (existing[0]) throw new OutreachError('ops.crm.interaction_already_recorded');
+      const at = this.now().toISOString(),
+        interaction = workflow.crmInteractionSchema.parse({
+          id: randomUUID(),
+          opportunityId: old.id,
+          kind: input.kind,
+          actorUserId: actor.toLowerCase(),
+          status: 'manually_recorded',
+          evidenceRef: input.evidenceRef,
+          occurredAt: input.occurredAt,
+          recordedAt: at,
+          scheduledAt: input.kind === 'call_booked' ? input.scheduledAt : null,
+        });
+      await tx`INSERT INTO ops.crm_interactions(id,opportunity_id,actor_user_id,kind,occurred_at,record) VALUES (${interaction.id},${old.id},${interaction.actorUserId},${interaction.kind},${interaction.occurredAt},${this.json(tx, interaction)})`;
+      const opportunity = await this.saveOpportunity(tx, {
+        ...old,
+        nextAction: input.kind === 'call_booked' ? { description: 'Attend the recorded call', dueAt: input.scheduledAt } : input.nextAction,
+        revision: old.revision + 1,
+        updatedAt: at,
+      });
+      await this.task(tx, opportunity, { actor, requestId: input.requestId, reason: input.reason });
+      const activity = await this.activity(
+        tx,
+        old.id,
+        { kind: 'operator', userId: actor.toLowerCase() },
+        input.kind === 'follow_up' ? 'note' : input.kind,
+        input.reason,
+        input.evidenceRef,
+      );
+      await this.audit(tx, actor, input.requestId, 'opportunity', old.id, 'interaction_recorded', input.reason, {
+        interaction,
+        revision: opportunity.revision,
+      });
+      return workflow.crmInteractionReceiptSchema.parse({ interaction, activity, opportunity });
+    });
+  }
+
+  private async saveOpportunity(tx: Sql, raw: unknown): Promise<CrmOpportunity> {
+    const row = crmOpportunitySchema.parse(raw);
+    await tx`UPDATE ops.crm_opportunities SET contact_id=${row.contactId},stage=${row.stage},owner_user_id=${row.ownerUserId},revision=${row.revision},record=${tx.json(row)} WHERE id=${row.id}`;
+    return row;
+  }
+  private async task(tx: Sql, opportunity: CrmOpportunity, audit?: { actor: string; requestId: string; reason: string }): Promise<void> {
+    const previous =
+      await tx`SELECT id,record,kind FROM ops.crm_tasks WHERE opportunity_id=${opportunity.id} AND (kind='next_action' OR ${opportunity.stage === 'closed'}) FOR UPDATE`;
     for (const p of previous) {
       const row = crmTaskSchema.parse(p.record);
-      if (row.status === 'pending')
-        await tx`UPDATE ops.crm_tasks SET record=${tx.json({ ...row, status: 'cancelled', updatedAt: this.now().toISOString() })} WHERE id=${row.id}`;
+      if (row.status === 'pending') {
+        await tx`UPDATE ops.crm_tasks SET status='cancelled',revision=revision+1,record=${tx.json({ ...row, status: 'cancelled', updatedAt: this.now().toISOString() })} WHERE id=${row.id}`;
+        if (audit)
+          await this.audit(tx, audit.actor, audit.requestId, 'task', row.id, 'task_transitioned', audit.reason, {
+            from: 'pending',
+            to: 'cancelled',
+            opportunityId: opportunity.id,
+            cause: opportunity.stage === 'closed' ? 'opportunity_closed' : 'next_action_replaced',
+          });
+      }
     }
     if (opportunity.nextAction) {
       const task = crmTaskSchema.parse({
@@ -398,7 +1047,13 @@ export class OutreachCrm {
         status: 'pending',
         updatedAt: this.now().toISOString(),
       });
-      await tx`INSERT INTO ops.crm_tasks(id,opportunity_id,record) VALUES (${task.id},${opportunity.id},${tx.json(task)})`;
+      await tx`INSERT INTO ops.crm_tasks(id,opportunity_id,record,kind,created_at,due_at,owner_user_id,status) VALUES (${task.id},${opportunity.id},${tx.json(task)},'next_action',${task.updatedAt},${task.dueAt},${task.ownerUserId},${task.status})`;
+      if (audit)
+        await this.audit(tx, audit.actor, audit.requestId, 'task', task.id, 'task_created', audit.reason, {
+          kind: 'next_action',
+          opportunityId: opportunity.id,
+          task,
+        });
     }
   }
   private async activity(
@@ -424,8 +1079,6 @@ export class OutreachCrm {
     return activity;
   }
 }
-import { z } from 'zod';
-import { outreachCaptureReceiptSchema } from '@intafaced/contracts';
 const uuidSchema = z.string().uuid();
 const cursorSchema = z.object({ at: z.string().datetime({ offset: true }), id: uuidSchema }).strict();
 function outreachCaptureReceipt(value: unknown) {

@@ -4,24 +4,28 @@ import postgres, { type Sql } from 'postgres';
 
 /** Ops-owned migration journal; one transaction and advisory lock per deployment. */
 export async function migrateOutreach(sql: Sql, direction: 'up' | 'down' = 'up'): Promise<void> {
-  const source = await readFile(
-    new URL(direction === 'down' ? '../../drizzle/0000_outreach_crm.down.sql' : '../../drizzle/0000_outreach_crm.sql', import.meta.url),
-    'utf8',
+  const names = ['0000_outreach_crm', '0001_crm_workflows'];
+  const migrations = await Promise.all(
+    (direction === 'down' ? [...names].reverse() : names).map(async (name) => ({
+      name,
+      source: await readFile(new URL(`../../drizzle/${name}${direction === 'down' ? '.down' : ''}.sql`, import.meta.url), 'utf8'),
+    })),
   );
   await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.migrations'))`;
     await tx`CREATE SCHEMA IF NOT EXISTS ops`;
     await tx`CREATE TABLE IF NOT EXISTS ops.crm_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
-    const done = await tx`SELECT name FROM ops.crm_migrations WHERE name = '0000_outreach_crm'`;
-    if (direction === 'down') {
-      if (!done.length) return;
-      await tx.unsafe(source);
-      await tx`DELETE FROM ops.crm_migrations WHERE name = '0000_outreach_crm'`;
-      return;
+    for (const migration of migrations) {
+      const done = await tx`SELECT name FROM ops.crm_migrations WHERE name = ${migration.name}`;
+      if (direction === 'down') {
+        if (!done.length) continue;
+        await tx.unsafe(migration.source);
+        await tx`DELETE FROM ops.crm_migrations WHERE name = ${migration.name}`;
+      } else if (!done.length) {
+        await tx.unsafe(migration.source);
+        await tx`INSERT INTO ops.crm_migrations(name) VALUES (${migration.name})`;
+      }
     }
-    if (done.length) return;
-    await tx.unsafe(source);
-    await tx`INSERT INTO ops.crm_migrations(name) VALUES ('0000_outreach_crm')`;
   });
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
