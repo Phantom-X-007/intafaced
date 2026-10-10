@@ -9,7 +9,12 @@
           <span>{{time|dateFormat}}&#160;&#160;{{utc}}</span>
         </div>
       </div>
-      <header v-if="isMoneyOsRoute" key="money-os-header" class="money-os-header">
+      <header v-if="isOutreachRoute" class="marketing-os-header outreach-shell-header">
+        <router-link to="/join" class="marketing-os-brand">INTAFACED</router-link>
+        <span class="marketing-os-grow"></span>
+        <nav aria-label="Enquiry navigation"><router-link to="/invest">Investor enquiries</router-link><router-link to="/join">All interests</router-link></nav>
+      </header>
+      <header v-else-if="isMoneyOsRoute" key="money-os-header" class="money-os-header">
         <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
         <span class="money-os-module">{{ osModuleLabel }}</span>
         <span class="money-os-header-grow"></span>
@@ -34,7 +39,7 @@
         <router-link v-if="!isLogin" to="/login" class="marketing-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="marketing-os-account">{{ strpo(member.username || 'Account') }}</router-link>
       </header>
-      <div class="layout" key="legacy-shell-header" v-if="!isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
+      <div class="layout" key="legacy-shell-header" v-if="!isOutreachRoute && !isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
         <div class="layout-ceiling">
           <router-link to="/" aria-label="INTAFACED home">
             <div class="layout-logo"></div>
@@ -182,7 +187,7 @@
          The Drawer moves its own root under body; without this host, a route
          layout update tried to insert relative to a vnode no longer present. -->
     <div class="ix-mobile-drawer-host">
-    <Drawer v-if="!isTerminalRoute && !isMoneyOsRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
+    <Drawer v-if="!isOutreachRoute && !isTerminalRoute && !isMoneyOsRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
         <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
             <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}} · {{$t("header.planeCex")}}</MenuItem>
@@ -268,14 +273,14 @@
     <footer v-if="!isTerminalRoute && !isMoneyOsRoute" class="public-footer">
       <router-link to="/" class="public-footer-brand">INTAFACED</router-link>
       <span>One interface. A connected financial world.</span>
-      <nav aria-label="Footer"><router-link to="/platform">Platform</router-link><router-link to="/support">Support</router-link><router-link to="/login">Sign in</router-link></nav>
+      <nav v-if="!isOutreachRoute" aria-label="Footer"><router-link to="/platform">Platform</router-link><router-link to="/support">Support</router-link><router-link to="/login">Sign in</router-link></nav>
       <span>© INTAFACED</span>
     </footer>
     <template>
       <BackTop :bottom="50"></BackTop>
     </template>
     <!-- B-CMDK: global route/market palette (⌘K / Ctrl+K). iView-free panel; tokens only. -->
-    <CommandPalette />
+    <CommandPalette v-if="!isOutreachRoute" />
   </div>
 </template>
 <script>
@@ -287,6 +292,7 @@ import { mapGetters, mapActions } from "vuex";
 import { MODULES as IX_MODULES, mutate } from "./config/intafaced.js";
 import CommandPalette from "./components/intafaced/CommandPalette.vue";
 import RouteBoundary from "./components/intafaced/RouteBoundary.vue";
+var outreachIntake = require("./assets/js/outreach-intake.js");
 var routeSemantics = require("./config/route-semantics.js");
 
 var I18N_STORAGE_KEY = "intafaced.i18n.locale";
@@ -368,7 +374,7 @@ export default {
       return this.$store.state.activeNav;
     },
     routeSemantic: function() {
-      return routeSemantics.semanticsForPath((this.$route && this.$route.path) || "/");
+      return this.isOutreachRoute ? { title: "Join INTAFACED", heading: "Join INTAFACED" } : routeSemantics.semanticsForPath((this.$route && this.$route.path) || "/");
     },
     isLogin: function() {
       return this.$store.getters.isLogin;
@@ -436,6 +442,9 @@ export default {
     isPlatformModuleRoute() {
       return !!this.platformModuleLabel;
     },
+    isOutreachRoute() {
+      return outreachIntake.isIntakeRoute(this.$route.path, typeof window === "undefined" ? "" : window.location.hostname);
+    },
     isMarketingRoute() {
       var routePath = (this.$route && this.$route.path) || "";
       var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
@@ -497,6 +506,7 @@ export default {
       return this.platformModuleLabel || "MONEY";
     },
     isMoneyOsRoute() {
+      if (this.isOutreachRoute) return false;
       var routePath = (this.$route && this.$route.path) || "";
       var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
       var paths = [routePath, browserPath];
@@ -558,7 +568,7 @@ export default {
   },
   methods: {
     applyRouteSemantics(route) {
-      var semantic = routeSemantics.semanticsForPath((route && route.path) || "/");
+      var semantic = this.isOutreachRoute ? { title: "Join INTAFACED" } : routeSemantics.semanticsForPath((route && route.path) || "/");
       if (typeof document !== "undefined") document.title = semantic.title + " — INTAFACED";
       this.$nextTick(this.annotateResizeSensors);
     },
