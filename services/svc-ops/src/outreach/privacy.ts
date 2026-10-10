@@ -171,7 +171,12 @@ export class OutreachPrivacy {
   }
   async status(raw: z.input<typeof crmErasureStatusInputSchema>, actor: string) {
     const input = crmErasureStatusInputSchema.parse(raw);
-    return this.controlled(actor, (tx) => this.readStatus(tx, input.intentId));
+    return this.controlled(actor, async (tx) => {
+      if ('intentId' in input) return this.readStatus(tx, input.intentId);
+      const [intent] = await tx`SELECT id FROM ops.crm_erasure_intents WHERE canonical_contact_id=${input.canonicalContactId}`;
+      if (!intent) throw new OutreachError('ops.crm.erasure_not_found');
+      return this.readStatus(tx, String(intent.id));
+    });
   }
   async begin(raw: z.input<typeof crmErasureBeginInputSchema>, actor: string) {
     const input = crmErasureBeginInputSchema.parse(raw);

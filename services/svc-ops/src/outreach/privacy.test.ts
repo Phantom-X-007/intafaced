@@ -82,6 +82,42 @@ describe.runIf(Boolean(process.env.TEST_DATABASE_URL))('founder-controlled clust
     const opportunity = (await crm.listOpportunities({ limit: 100 })).items.find((o) => o.submissionId === receipt.submissionId)!;
     return { input, receipt, opportunity };
   };
+  it('recovers an unreceived start receipt from the canonical contact after reconnection, for either founder', async () => {
+    const original = await saved(),
+      unrelated = await saved();
+    await expect(crm.privacy.status({ canonicalContactId: original.opportunity.contactId }, founders[0])).rejects.toMatchObject({
+      code: 'ops.crm.erasure_not_found',
+    });
+    const preview = await crm.privacy.preview({ canonicalContactId: original.opportunity.contactId }, founders[0]);
+    // The committed start receipt was lost before the founder received its generated intent identifier.
+    await crm.privacy.begin(beginInput(preview), founders[0]);
+    const reconnected = postgres(db.url, { max: 2 });
+    try {
+      const reopened = new OutreachCrm(reconnected, config, undefined, notify.port);
+      const recovered = await reopened.privacy.status({ canonicalContactId: original.opportunity.contactId }, founders[1]);
+      expect(recovered).toMatchObject({
+        canonicalContactId: original.opportunity.contactId,
+        status: 'pending_notify',
+        requestedBy: founders[0],
+      });
+      expect((await db.sql`SELECT count(*)::int AS count FROM ops.crm_erasure_intents`)[0]?.count).toBe(1);
+      await expect(reopened.privacy.status({ canonicalContactId: unrelated.opportunity.contactId }, founders[1])).rejects.toMatchObject({
+        code: 'ops.crm.erasure_not_found',
+      });
+      const completed = await reopened.privacy.advance(
+        { requestId: randomUUID(), intentId: recovered.intentId, expectedRevision: recovered.revision },
+        founders[1],
+      );
+      expect(completed.status).toBe('complete');
+      expect(await reopened.privacy.status({ canonicalContactId: original.opportunity.contactId }, founders[0])).toEqual(completed);
+      expect(await crm.getOpportunity({ opportunityId: unrelated.opportunity.id })).not.toBeNull();
+      await expect(reopened.privacy.status({ canonicalContactId: original.opportunity.contactId }, randomUUID())).rejects.toMatchObject({
+        code: 'ops.crm.operator_forbidden',
+      });
+    } finally {
+      await reconnected.end();
+    }
+  });
   it('releases a failed consistent read before an exclusive privacy operation', async () => {
     await expect(
       withPrivacySnapshot(db.sql, async (tx) => {
@@ -482,12 +518,13 @@ describe.runIf(Boolean(process.env.TEST_DATABASE_URL))('founder-controlled clust
       () => caller.privacyBegin(input),
       () => caller.privacyAdvance({ requestId: randomUUID(), intentId: begun.intentId, expectedRevision: 1 }),
       () => caller.privacyStatus({ intentId: begun.intentId }),
+      () => caller.privacyStatus({ canonicalContactId: a.opportunity.contactId }),
       () => caller.privacyRetentionStatus(),
     ])
       await expect(call()).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(api.createCaller({ ...context, principal: null }).privacyStatus({ intentId: begun.intentId })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
-    expect(authority).toHaveBeenCalledTimes(6);
+    expect(authority).toHaveBeenCalledTimes(7);
   });
 });
