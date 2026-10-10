@@ -388,6 +388,26 @@ export const crmListInputSchema = z
   .strict();
 export type CrmListInput = z.infer<typeof crmListInputSchema>;
 
+/** Private list companions avoid one authenticated detail request per visible row. */
+export const crmOpportunityPageSchema = z
+  .object({
+    items: z.array(crmOpportunitySchema).max(200),
+    contacts: z.array(crmContactSchema).max(200),
+    nextCursor: z.string().min(1).max(256).nullable(),
+  })
+  .strict()
+  .superRefine((page, ctx) => {
+    const ids = page.contacts.map((contact) => contact.id);
+    if (
+      new Set(ids).size !== ids.length ||
+      page.items.some((item) => !ids.includes(item.contactId)) ||
+      ids.some((contactId) => !page.items.some((item) => item.contactId === contactId))
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['contacts'], message: 'List contacts must match the visible opportunities' });
+    }
+  });
+export type CrmOpportunityPage = z.infer<typeof crmOpportunityPageSchema>;
+
 export const crmNoteInputSchema = z.object({ requestId: id, opportunityId: id, note: z.string().trim().min(1).max(2000) }).strict();
 export type CrmNoteInput = z.infer<typeof crmNoteInputSchema>;
 
@@ -401,7 +421,7 @@ export interface OutreachCrmContract {
   capture(input: OutreachCaptureInput): Promise<OutreachCaptureReceipt>;
   resume(input: OutreachContinuationInput): Promise<OutreachDraft>;
   answer(input: OutreachQuestionnaireInput): Promise<OutreachDraft>;
-  listOpportunities(input: CrmListInput): Promise<{ items: CrmOpportunity[]; nextCursor: string | null }>;
+  listOpportunities(input: CrmListInput): Promise<CrmOpportunityPage>;
   getOpportunity(input: { opportunityId: string }): Promise<{
     opportunity: CrmOpportunity;
     contact: CrmContact;

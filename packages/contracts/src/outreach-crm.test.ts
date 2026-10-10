@@ -4,6 +4,7 @@ import {
   crmEngagementSyncSchema,
   crmInvestorStageSchema,
   crmOpportunitySchema,
+  crmOpportunityPageSchema,
   crmStageChangeInputSchema,
   crmStageFitsAudience,
   crmSubmissionSchema,
@@ -124,6 +125,25 @@ const OPPORTUNITY_BASE = {
 };
 
 describe('outreach and CRM boundary contracts', () => {
+  it('includes exactly the private contacts associated with visible opportunities', () => {
+    const opportunity = { ...OPPORTUNITY_BASE, audience: 'investor', stage: 'new', indicativeContribution: { status: 'undecided' } };
+    const contact = {
+      id: CONTACT_ID,
+      name: 'Ada',
+      email: 'ada@example.com',
+      emailEvidence: { status: 'unverified' },
+      organisationIds: [],
+      interests: ['investor'],
+      platformIdentity: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const page = { items: [opportunity], contacts: [contact], nextCursor: null };
+    expect(crmOpportunityPageSchema.safeParse(page).success).toBe(true);
+    expect(crmOpportunityPageSchema.safeParse({ ...page, contacts: [] }).success).toBe(false);
+    expect(crmOpportunityPageSchema.safeParse({ ...page, contacts: [contact, contact] }).success).toBe(false);
+    expect(crmOpportunityPageSchema.safeParse({ ...page, items: [] }).success).toBe(false);
+  });
   it.each(['investor', 'trader', 'merchant', 'academy', 'partner'] as const)(
     'accepts the published version 1 %s questionnaire',
     (audience) => {
