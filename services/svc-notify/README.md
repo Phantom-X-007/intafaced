@@ -169,6 +169,58 @@ rather than a green tick over silence.
 
 ## API
 
+### Guest outreach emails
+
+`guestNotifications.send`, `get`, and `eraseSubmission` are **POST mutations**
+restricted to authenticated `svc-ops` with v2 signatures over the exact body.
+Configure a dedicated `NOTIFY_OPS_SERVICE_SECRET` (at least 32 characters), shared
+only with the ops producer and distinct from `EDGE_PRINCIPAL_SECRET`. Absence
+leaves guest ingress closed. Configuring it requires migration
+`0009_guest_notifications.sql` at boot. The installed Fastify tRPC parser retains
+the original JSON string; the owned ingress adapter verifies those exact bytes
+and refuses parsed objects without retained bytes. GET is not a signed lookup.
+
+Ops derives the recipient from the original saved submission, even after a CRM
+contact merge. Guest email neither looks up identity by email nor creates/verifies
+a platform channel target. Existing platform notifications still require their
+confirmed targets. Allowed purposes are contact acknowledgement, staff-authorized
+information request, reviewed call invitation and follow-up. Four fixed English
+wrappers from `@intafaced/i18n` (`notify.outreach.<kind>.title/body`) render the
+messages; callers cannot supply a subject, HTML, template or link. A missing
+catalog key refuses before any transport attempt.
+The acknowledgement says **contact details received**, never questionnaire complete.
+No continuation capability is placed in a message, URL or log.
+
+The owned guest queue commits the immutable business key, normalized request/hash
+and claim before handing a message to the transport. Concurrent callers and
+replicas share the claim. Accepted duplicates return the original receipt.
+Changing recipient or content under the same key refuses `guest.request_conflict`.
+URL/token configuration is not reachability; `accepted` is gateway acceptance,
+never delivery or human receipt. Error bodies are discarded; only bounded opaque
+references can be retained. Operational results contain IDs, times and typed codes.
+
+There is **one transport attempt per business request**. A timeout, lost response,
+ambiguous HTTP failure or expired process claim becomes `unresolved` with
+`guest.acceptance_unknown`. Acceptance followed by a failed SQL write retains the
+claim; expiry becomes unresolved after restart. Such a request is never blindly
+resent, even though the existing gateway sends an idempotency header. No verified
+provider dedupe/acceptance-lookup capability is configured by this change; staff
+must resolve uncertainty with gateway evidence. A permanent rejection is refused.
+Only a known pre-attempt configuration/kill-switch or recipient-budget refusal can
+resume the identical request safely. Ops owns the durable producer outbox/worker.
+
+The recipient budget defaults to **3 attempts per 15-minute fixed window**, shared
+in PostgreSQL across replicas. `NOTIFY_GUEST_ADDRESS_MAX_PER_WINDOW` and
+`NOTIFY_GUEST_ADDRESS_WINDOW_MS` configure it. Duplicate claims spend no new budget.
+Only a recipient hash is stored in budget rows, and old windows are pruned on send.
+
+`eraseSubmission` purges recipient/staff text and any gateway reference while
+retaining the minimum business hash and outcome. It records an immutable submission
+tombstone and replays the original UUID request receipt. A live attempted claim
+refuses `guest.delivery_in_progress`; settle it or let its bounded lease expire
+before retrying. Erased submissions cannot enqueue further messages. Erasure covers
+notify's owned records; ops owns submission/contact erasure and authorization.
+
 | Procedure               | Scope          | Input                                  | Output                                                                                                         |
 | ----------------------- | -------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `health`                | public         | —                                      | `{ ok, service, fanoutEnabled, venueIncident }` — `ok` is liveness; `venueIncident.allFine` is the venue claim |
