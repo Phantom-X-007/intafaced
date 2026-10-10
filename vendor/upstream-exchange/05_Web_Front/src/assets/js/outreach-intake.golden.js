@@ -376,6 +376,108 @@ async function main() {
     ),
   );
   assert.equal(intake.createIntake(options(expiredStore, async function () {})).state.local, null);
+  // Unsent forms restore independently of immutable, backend-confirmed answers.
+  let uiStore = storage(),
+    extensionRequests = [],
+    lostExtension = true;
+  let current = Object.assign({}, receipt, {
+    contact: intake.buildContact(Object.assign({}, contact, { interests: ['investor'] })),
+    questionnaires: [],
+    completedAt: null,
+  });
+  let uiController = intake.createIntake(
+    options(uiStore, async function (method, input) {
+      if (method === 'capture') return { ok: true, data: receipt };
+      if (method === 'addInterests') {
+        extensionRequests.push(JSON.parse(JSON.stringify(input)));
+        if (lostExtension) {
+          lostExtension = false;
+          return { ok: false, message: 'unreachable' };
+        }
+        current = Object.assign({}, current, {
+          revision: current.revision + 1,
+          contact: Object.assign({}, current.contact, { interests: ['investor', 'academy'] }),
+        });
+      }
+      return { ok: true, data: current };
+    }),
+  );
+  await uiController.capture(Object.assign({}, contact, { interests: ['investor'] }));
+  await uiController.saveUi({
+    forms: { investor: Object.assign({}, forms.investor, { timing: '', message: 'Unsent context' }) },
+    groups: { investor: 1 },
+    remember: true,
+  });
+  let restoredUi = intake.createIntake(
+    options(uiStore, async function () {
+      return { ok: true, data: current };
+    }),
+  );
+  assert.equal(restoredUi.state.ui.forms.investor.message, 'Unsent context');
+  assert.equal(restoredUi.state.ui.groups.investor, 1);
+  assert.equal(restoredUi.state.draft, null, 'stored forms never imply backend-confirmed answers');
+  await assert.rejects(uiController.addInterests(['academy']));
+  await uiController.resume();
+  await uiController.addInterests(['academy']);
+  assert.equal(
+    extensionRequests[0].requestId,
+    extensionRequests[1].requestId,
+    'checking current state cannot discard unresolved extension identity',
+  );
+  assert.deepEqual(uiController.state.draft.contact.interests, ['investor', 'academy']);
+  assert.deepEqual(uiController.state.local.capture.contact.interests, ['investor'], 'original contact intent is preserved');
+  assert.equal(uiController.state.local.extension, null);
+  await assert.rejects(uiController.addInterests(['academy', 'academy']));
+  let asyncStore = storage(),
+    releasePersist,
+    sent = false;
+  asyncStore.setItem = function () {
+    return new Promise(function (resolve) {
+      releasePersist = resolve;
+    });
+  };
+  let asyncController = intake.createIntake(
+    options(asyncStore, async function (method) {
+      sent = true;
+      return { ok: true, data: method === 'capture' ? receipt : current };
+    }),
+  );
+  let capturePromise = asyncController.capture(Object.assign({}, contact, { interests: ['investor'] }));
+  assert.equal(sent, false, 'async protected storage commits retry intent before the first network attempt');
+  releasePersist();
+  // Subsequent receipt/resume writes use the test's ordinary synchronous store.
+  asyncStore.setItem = function () {};
+  await capturePromise;
+  assert.equal(sent, true);
+  await uiController.clear();
+  assert.equal(uiStore.getItem(intake.STORAGE_KEY), null, 'forget clears local capability and unsent forms');
+  let deniedRemovalStore = storage();
+  deniedRemovalStore.setItem(intake.STORAGE_KEY, 'retained-local-fixture');
+  deniedRemovalStore.removeItem = function () { throw new Error('Storage removal denied'); };
+  let protectedStorage = await require('./outreach-draft-storage.js').createDraftStorage({
+    session: deniedRemovalStore, indexedDB: null, crypto: require('node:crypto').webcrypto,
+    storageKey: intake.STORAGE_KEY, now: Date.now,
+  });
+  await assert.rejects(protectedStorage.removeItem(intake.STORAGE_KEY), /draft_storage_unavailable/,
+    'forget must refuse if a retained tab draft cannot be removed');
+  assert.equal(protectedStorage.getItem(intake.STORAGE_KEY), 'retained-local-fixture', 'failed forgetting preserves in-memory recovery state');
+  let racingStore = storage();
+  let racingStorage = await require('./outreach-draft-storage.js').createDraftStorage({
+    session: racingStore, indexedDB: null, crypto: require('node:crypto').webcrypto,
+    storageKey: intake.STORAGE_KEY, now: Date.now,
+  });
+  let pendingWrite = racingStorage.setItem(intake.STORAGE_KEY, JSON.stringify({ ui: { remember: false } }));
+  let pendingForget = racingStorage.removeItem(intake.STORAGE_KEY);
+  await Promise.all([pendingWrite, pendingForget]);
+  assert.equal(racingStore.getItem(intake.STORAGE_KEY), null, 'queued tab write cannot resurrect a forgotten draft');
+  let publicInfo = require('./outreach-public-info.js').publicInfo;
+  assert.deepEqual(publicInfo({ contactUrl: 'javascript:alert(1)', retentionNotice: '' }), { contactUrl: null, retentionNotice: null });
+  assert.equal(publicInfo({ contactUrl: 'https://user:password@example.test' }).contactUrl, null);
+  assert.equal(publicInfo({ contactUrl: 'mailto:contact@example.test?body=unsafe' }).contactUrl, null);
+  assert.deepEqual(publicInfo({ contactUrl: 'mailto:contact@example.test', retentionNotice: ' Operator-approved test notice ' }), {
+    contactUrl: 'mailto:contact@example.test',
+    retentionNotice: 'Operator-approved test notice',
+  });
   let component = fs.readFileSync(path.join(__dirname, '../../pages/intafaced/Outreach.vue'), 'utf8');
   assert.ok(component.includes("mutate('ops', 'outreach.' + method, input, null)"));
   assert.equal(

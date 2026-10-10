@@ -1,223 +1,468 @@
 <template>
-  <div class="public-page outreach-page">
-    <section class="outreach-intro" aria-labelledby="outreach-title">
-      <p class="outreach-eyebrow">INTAFACED · PRELAUNCH</p>
-      <h1 id="outreach-title">A connected financial world.<br />Start a conversation.</h1>
-      <p>We are building INTAFACED around trading, payments, learning and community. Tell us where you would like to take part.</p>
-      <p class="outreach-small">
-        No account required. An enquiry expresses interest and does not grant product access or create an investment commitment.
-      </p>
-      <nav aria-label="Enquiry journeys" class="outreach-journeys">
-        <router-link v-for="a in audiences" :key="a.key" :to="journeyPath(a.path)">{{ a.label }}</router-link>
-      </nav>
-    </section>
-
-    <section class="outreach-form-panel" aria-labelledby="intake-heading" :aria-busy="busy ? 'true' : 'false'">
-      <p class="outreach-eyebrow">{{ progressLabel }}</p>
-      <h2 id="intake-heading" ref="stepHeading" tabindex="-1">{{ stepTitle }}</h2>
-      <p v-if="error" ref="error" tabindex="-1" class="outreach-notice" role="alert">{{ error }}</p>
-      <button v-if="continuationUnavailable" type="button" class="outreach-secondary" :disabled="busy" @click="startNew">
-        Start a new enquiry
-      </button>
-      <p v-if="!state.storageAvailable" class="outreach-notice" role="status">
-        Your browser cannot save your progress here. Keep this page open to finish. Refreshing or reopening it may lose access to your
-        enquiry.
-      </p>
-
-      <div v-if="resumeAvailable && !draft" class="outreach-resume">
-        <p>A saved enquiry is available in this browser tab.</p>
-        <button type="button" class="outreach-primary" :disabled="busy" @click="reopen">
-          {{ busy ? 'Reopening…' : 'Reopen saved enquiry' }}
+  <div class="outreach-page" :class="{ 'is-welcome': screen === 'welcome' }">
+    <p v-if="expiredDraft || state.expired" class="outreach-notice expiry-notice" role="status">
+      Your previous draft access expired. You can start a new enquiry.
+    </p>
+    <section v-if="screen === 'welcome'" class="outreach-welcome" aria-labelledby="welcome-title">
+      <div class="outreach-sculpture" aria-hidden="true">
+        <div class="sculpture-ring ring-a"></div>
+        <div class="sculpture-ring ring-b"></div>
+        <div class="sculpture-ring ring-c"></div>
+      </div>
+      <div class="welcome-content">
+        <p class="outreach-eyebrow">
+          <span class="status-dot"></span> {{ investorEntry ? 'INTAFACED · INVESTOR ENQUIRY' : 'INTAFACED · PRELAUNCH' }}
+        </p>
+        <h1 id="welcome-title" ref="welcomeTitle" tabindex="-1">
+          {{ investorEntry ? 'Discuss the' : 'One ambition.' }}<br /><span>{{ investorEntry ? 'INTAFACED raise.' : 'Many ways in.' }}</span>
+        </h1>
+        <p class="welcome-description">
+          {{
+            investorEntry
+              ? 'We’re bringing accounts, payments and trading into one financial platform. Tell us whether you’re considering investing or can introduce an investor.'
+              : 'Trading. Payments. Learning. Community. Tell us where you would like to take part in INTAFACED.'
+          }}
+        </p>
+        <button class="outreach-primary welcome-cta" type="button" @click="begin">
+          {{ resumeAvailable ? 'Continue your enquiry' : investorEntry ? 'Start enquiry' : 'Start a conversation' }}
+          <span aria-hidden="true">↗</span>
         </button>
-        <button v-if="!continuationUnavailable" type="button" class="outreach-secondary" :disabled="busy" @click="startNew">
-          Start a new enquiry
+        <p class="outreach-small">
+          {{
+            resumeAvailable
+              ? 'A previous enquiry is available in this browser.'
+              : 'No account needed. Sending an enquiry does not commit you to an investment.'
+          }}
+        </p>
+        <button v-if="investorEntry && !resumeAvailable" class="outreach-text-button" type="button" @click="beginWithInterests">
+          Explore another interest <span aria-hidden="true">→</span>
         </button>
       </div>
+      <div class="welcome-footer">
+        <span>YOUR NEXT CHAPTER, CONNECTED.</span><span>{{ investorEntry ? 'INVESTOR ENQUIRIES' : 'OPEN CONVERSATIONS' }}</span>
+      </div>
+    </section>
 
-      <form v-else-if="!draft" @submit.prevent="saveContact">
-        <fieldset class="outreach-interests" :disabled="busy">
-          <legend>What interests you? <span>Select one or more.</span></legend>
-          <label
-            v-for="a in audiences"
-            :key="a.key"
-            class="outreach-interest"
-            :class="{ selected: contact.interests.indexOf(a.key) !== -1 }"
-          >
-            <input v-model="contact.interests" type="checkbox" :value="a.key" />
-            <span
-              ><strong>{{ a.label }}</strong
-              ><small>{{ a.description }}</small></span
-            >
-          </label>
-        </fieldset>
-        <div class="outreach-grid">
-          <label
-            >Your name <span aria-hidden="true">*</span
-            ><input v-model.trim="contact.name" name="name" autocomplete="name" maxlength="120" required :disabled="busy"
-          /></label>
-          <label
-            >Email <span aria-hidden="true">*</span
-            ><input v-model.trim="contact.email" name="email" autocomplete="email" type="email" maxlength="254" required :disabled="busy"
-          /></label>
-          <label
-            >Organisation <small>Optional</small
-            ><input
-              v-model.trim="contact.organisationName"
-              name="organization"
-              autocomplete="organization"
-              maxlength="160"
-              :disabled="busy"
-          /></label>
-          <label
-            >Country <small>Optional</small>
-            <select v-model="contact.country" name="country" autocomplete="country" :disabled="busy">
-              <option value="">Prefer not to say</option>
-              <option v-for="country in countries" :key="country.code" :value="country.code">{{ country.name }}</option>
-            </select>
-          </label>
-        </div>
-        <p class="outreach-small">
-          By saving your enquiry, you ask INTAFACED to review it and contact you about your interests. Name, email and at least one interest
-          are required.
-        </p>
-        <label class="outreach-consent"
-          ><input v-model="contact.marketingOptIn" type="checkbox" :disabled="busy" /><span
-            >Also send me optional INTAFACED news and marketing updates.</span
-          ></label
-        >
-        <p class="outreach-small">Marketing permission is optional and separate from replies about this enquiry.</p>
-        <button type="submit" class="outreach-primary" :disabled="busy">
-          {{ busy ? 'Saving your enquiry…' : 'Save contact & continue' }} <span aria-hidden="true">→</span>
+    <section v-else class="outreach-workspace" :aria-busy="busy ? 'true' : 'false'" aria-labelledby="intake-heading">
+      <aside class="outreach-rail">
+        <p class="outreach-eyebrow">YOUR CONVERSATION</p>
+        <h2>{{ investorEntry ? 'Build with us.' : 'Find your way in.' }}</h2>
+        <p>Share a little about yourself.<br />We will take it from there.</p>
+        <ol class="journey-steps" aria-label="Enquiry progress">
+          <li :class="{ active: !draft, done: !!draft }"><span>01</span> Your details <small v-if="draft">Saved</small></li>
+          <li :class="{ active: draft && !complete, done: complete }">
+            <span>02</span> Your interests <small v-if="draft">{{ savedCount }}/{{ draft.contact.interests.length }} submitted</small>
+          </li>
+          <li :class="{ active: complete }"><span>03</span> Next steps</li>
+        </ol>
+        <p class="rail-note">An enquiry starts a conversation. It does not create an investment commitment or grant product access.</p>
+        <button type="button" class="outreach-text-button" @click="privacyOpen = true">
+          Privacy &amp; your enquiry <span aria-hidden="true">↗</span>
         </button>
-        <p class="outreach-small">Save your details, then tell us more. You can return to this tab to finish.</p>
-      </form>
-
-      <template v-else>
-        <p class="outreach-saved" role="status">Your contact enquiry is saved for review.</p>
-        <p class="outreach-small">
-          {{ savedCount }} of {{ draft.contact.interests.length }} selected questionnaires saved. Submitted answers are preserved.
+      </aside>
+      <div class="outreach-form-panel">
+        <p class="outreach-eyebrow">{{ progressLabel }}</p>
+        <h1 id="intake-heading" ref="stepHeading" tabindex="-1">{{ stepTitle }}</h1>
+        <p v-if="error" ref="error" tabindex="-1" class="outreach-notice" role="alert">{{ error }}</p>
+        <p v-if="!state.storageAvailable" class="outreach-notice" role="status">
+          Your progress cannot be stored in this browser. Keep this page open to finish; closing or refreshing may lose your access.
         </p>
-        <progress
-          :value="savedCount"
-          :max="draft.contact.interests.length"
-          :aria-label="'Questionnaires saved: ' + savedCount + ' of ' + draft.contact.interests.length"
-        ></progress>
-        <p class="outreach-small">You can return to this tab until {{ expiryLabel }}.</p>
+        <button v-if="continuationUnavailable" type="button" class="outreach-secondary" :disabled="busy" @click="startNew">
+          Start a new enquiry
+        </button>
 
-        <form v-if="currentAudience" :key="currentAudience" @submit.prevent="saveAnswers">
-          <p class="outreach-small">All questions are required unless marked optional.</p>
-          <div class="outreach-questions">
-            <template v-for="f in fields">
-              <fieldset v-if="f.type === 'checks'" :key="f.key" :disabled="busy">
-                <legend>{{ f.label }}</legend>
-                <label v-for="o in f.options" :key="o[0]" class="outreach-consent"
-                  ><input v-model="answers[f.key]" type="checkbox" :value="o[0]" /><span>{{ o[1] }}</span></label
-                >
-              </fieldset>
-              <fieldset v-else-if="f.type === 'countries'" :key="f.key" :disabled="busy">
-                <legend>{{ f.label }}</legend>
-                <select v-model="answers[f.key]" multiple size="6" required :aria-label="f.label">
-                  <option v-for="country in countries" :key="country.code" :value="country.code">{{ country.name }}</option>
-                </select>
-                <p class="outreach-small">Select one or more countries. On a computer, hold Ctrl or ⌘ to select several.</p>
-              </fieldset>
-              <label v-else :key="f.key"
-                >{{ f.label }}
-                <select v-if="f.type === 'select'" v-model="answers[f.key]" required :disabled="busy">
-                  <option disabled value="">Select an option</option>
-                  <option v-for="o in f.options" :key="o[0]" :value="o[0]">{{ o[1] }}</option>
-                </select>
-                <textarea
-                  v-else-if="f.type === 'textarea'"
-                  v-model.trim="answers[f.key]"
-                  :maxlength="f.max"
-                  :required="f.key !== 'scope'"
-                  :disabled="busy"
-                  rows="4"
-                ></textarea>
-                <input
-                  v-else
-                  v-model.trim="answers[f.key]"
-                  :type="f.type === 'url' ? 'url' : 'text'"
-                  :maxlength="f.max"
-                  :required="f.key !== 'website'"
-                  :disabled="busy"
-                />
-              </label>
-            </template>
-            <fieldset v-if="currentAudience === 'investor' || currentAudience === 'merchant'" :disabled="busy">
-              <legend>{{ currentAudience === 'investor' ? 'Indicative contribution (optional)' : 'Processing volume (optional)' }}</legend>
-              <p class="outreach-small">For context only. No payment or commitment is created.</p>
-              <label
-                >Status<select v-model="answers.amountStatus">
-                  <option :value="currentAudience === 'investor' ? 'undecided' : 'unknown'">
-                    {{ currentAudience === 'investor' ? 'Undecided' : 'Unknown' }}
-                  </option>
-                  <option value="stated">I would like to state an amount</option>
-                </select></label
-              >
-              <div v-if="answers.amountStatus === 'stated'" class="outreach-grid outreach-amount">
-                <label
-                  >Amount<input
-                    v-model.trim="answers.amount"
-                    type="text"
-                    inputmode="decimal"
-                    pattern="(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?"
-                    maxlength="60"
-                    required
-                    aria-describedby="amount-help"
-                /></label>
-                <label
-                  >Currency code<input
-                    v-model.trim="answers.currency"
-                    type="text"
-                    pattern="[A-Z]{3}"
-                    maxlength="3"
-                    required
-                    placeholder="USD"
-                /></label>
-                <label v-if="currentAudience === 'merchant'"
-                  >Volume period<select v-model="answers.period" required>
-                    <option disabled value="">Select a period</option>
-                    <option value="daily">Daily</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="annual">Annual</option>
-                  </select></label
-                >
-                <p id="amount-help" class="outreach-small">
-                  Use digits and a decimal point, without commas. Currency is a three-letter uppercase code.
-                </p>
-              </div>
-            </fieldset>
+        <div v-if="resumeAvailable && !draft" class="outreach-resume">
+          <p>Continue the enquiry saved in this browser. Your answers will be shown after we check your access.</p>
+          <button type="button" class="outreach-primary" :disabled="busy" @click="reopen">
+            {{ busy ? 'Opening…' : 'Reopen saved enquiry' }} <span aria-hidden="true">→</span>
+          </button>
+          <button type="button" class="outreach-text-button" :disabled="busy" @click="startNew">Start a new enquiry</button>
+        </div>
+
+        <form v-else-if="!draft" @submit.prevent="saveContact">
+          <p class="section-description">Your details will be saved so the team can follow up, even if you finish the questions later.</p>
+          <div class="selected-interest-summary">
+            <span>{{ contact.interests.length ? contact.interests.map(audienceLabel).join(' · ') : 'Choose your interests' }}</span
+            ><button type="button" class="outreach-text-button" @click="interestsOpen = !interestsOpen">
+              {{ interestsOpen ? 'Done' : 'Change interests' }}
+            </button>
+          </div>
+          <fieldset v-if="interestsOpen || !contact.interests.length" class="outreach-interests" :disabled="busy">
+            <legend>What interests you? <small>Select one or more.</small></legend>
+            <label v-for="a in audiences" :key="a.key" class="outreach-interest" :class="{ selected: contact.interests.includes(a.key) }"
+              ><input v-model="contact.interests" type="checkbox" :value="a.key" /><span
+                ><strong>{{ a.label }}</strong
+                ><small>{{ a.description }}</small></span
+              ><span class="choice-mark" aria-hidden="true">{{ contact.interests.includes(a.key) ? '✓' : '+' }}</span></label
+            >
+          </fieldset>
+          <div class="outreach-grid">
             <label
-              >When would you like to take part?<select v-model="answers.timing" required :disabled="busy">
-                <option disabled value="">Select timing</option>
-                <option v-for="o in timing" :key="o[0]" :value="o[0]">{{ o[1] }}</option>
+              >Your name <span aria-hidden="true">*</span
+              ><input
+                v-model.trim="contact.name"
+                name="name"
+                autocomplete="name"
+                maxlength="120"
+                required
+                :disabled="busy"
+                placeholder="Full name"
+            /></label>
+            <label
+              >Email <span aria-hidden="true">*</span
+              ><input
+                aria-describedby="contact-email-help"
+                v-model.trim="contact.email"
+                name="email"
+                autocomplete="email"
+                type="email"
+                maxlength="254"
+                required
+                :disabled="busy"
+                placeholder="you@example.com"
+              /><small id="contact-email-help" class="field-help">We’ll use this address to reply about your enquiry.</small></label
+            >
+            <label
+              >Organisation <small>Optional</small
+              ><input
+                v-model.trim="contact.organisationName"
+                name="organization"
+                autocomplete="organization"
+                maxlength="160"
+                :disabled="busy"
+                placeholder="Company or organisation"
+            /></label>
+            <label
+              >Country <small>Optional</small
+              ><select v-model="contact.country" name="country" autocomplete="country" :disabled="busy">
+                <option value="">Prefer not to say</option>
+                <option v-for="country in countries" :key="country.code" :value="country.code">{{ country.name }}</option>
               </select></label
             >
-            <label
-              >Anything else? <small>Optional</small
-              ><textarea v-model.trim="answers.message" maxlength="2000" rows="3" :disabled="busy"></textarea>
-            </label>
           </div>
-          <button type="submit" class="outreach-primary" :disabled="busy">
-            {{ busy ? 'Saving answers…' : 'Save ' + audienceLabel(currentAudience).toLowerCase() + ' answers' }}
-            <span aria-hidden="true">→</span>
-          </button>
-          <button type="button" class="outreach-secondary" :disabled="busy" @click="reopen">Refresh saved progress</button>
+          <label class="outreach-consent"
+            ><input v-model="contact.marketingOptIn" type="checkbox" :disabled="busy" /><span
+              >Send me INTAFACED news and updates.</span
+            ></label
+          >
+          <p class="outreach-small consent-help">Optional marketing permission is separate from replies about this enquiry.</p>
+          <label class="outreach-consent"
+            ><input v-model="remember" type="checkbox" :disabled="busy || !persistentAvailable" /><span
+              >Remember my draft on this device.</span
+            ></label
+          >
+          <p class="outreach-small consent-help">
+            {{
+              persistentAvailable
+                ? 'An encrypted draft lets you close this tab and return on this device. Leave this off on a shared device.'
+                : 'Device recovery is unavailable in this browser. Keep this tab open to finish.'
+            }}
+          </p>
+          <div class="outreach-actions">
+            <button type="button" class="outreach-text-button" @click="screen = 'welcome'">← Back</button
+            ><button type="submit" class="outreach-primary" :disabled="busy || !storageReady">
+              {{ busy ? 'Saving…' : 'Save details & continue' }} <span aria-hidden="true">→</span>
+            </button>
+          </div>
+          <p class="outreach-small">
+            By continuing, you ask INTAFACED to review and reply to your enquiry.
+            <button type="button" class="outreach-inline-link" @click="privacyOpen = true">Privacy &amp; contact</button>
+          </p>
         </form>
-        <div v-else-if="complete" class="outreach-complete">
-          <h3>Thank you. Your selected enquiries are complete.</h3>
-          <p>The team will review your enquiry and follow up using the email you provided.</p>
-          <ul>
-            <li v-for="audience in draft.contact.interests" :key="audience">{{ audienceLabel(audience) }} · saved</li>
-          </ul>
-        </div>
-        <div v-else>
-          <p>Your answers are saved. We could not confirm completion yet.</p>
-          <button type="button" class="outreach-secondary" :disabled="busy" @click="reopen">Refresh saved progress</button>
-        </div>
-      </template>
+
+        <template v-else>
+          <div class="selected-interest-summary saved-summary">
+            <span><span class="saved-dot" aria-hidden="true">✓</span> Your details are saved. Continue with a few questions.</span
+            ><button type="button" class="outreach-text-button" :disabled="busy" @click="openAddInterests">Add an interest</button>
+          </div>
+          <details class="saved-contact-details">
+            <summary>View your saved details</summary>
+            <dl>
+              <div>
+                <dt>Name</dt>
+                <dd>{{ draft.contact.name }}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{{ draft.contact.email }}</dd>
+              </div>
+              <div v-if="draft.contact.organisationName">
+                <dt>Organisation</dt>
+                <dd>{{ draft.contact.organisationName }}</dd>
+              </div>
+              <div v-if="draft.contact.country">
+                <dt>Country</dt>
+                <dd>{{ countryLabel(draft.contact.country) }}</dd>
+              </div>
+            </dl>
+            <p class="outreach-small">
+              These details are already saved.
+              <template v-if="publicInfo.contactUrl"
+                >For a correction, <a :href="publicInfo.contactUrl">contact the INTAFACED team</a>.</template
+              ><template v-else>You can request a correction when the team follows up.</template>
+            </p>
+          </details>
+          <form v-if="interestsOpen" class="interest-extension" @submit.prevent="saveInterests">
+            <fieldset :disabled="busy">
+              <legend>Explore another conversation</legend>
+              <label v-for="a in audiences" :key="a.key" class="outreach-interest" :class="{ selected: selectedInterests.includes(a.key) }"
+                ><input
+                  v-model="selectedInterests"
+                  type="checkbox"
+                  :value="a.key"
+                  :disabled="draft.contact.interests.includes(a.key)"
+                /><span
+                  ><strong>{{ a.label }}</strong
+                  ><small>{{ a.description }}</small></span
+                ><span class="choice-mark" aria-hidden="true">{{ selectedInterests.includes(a.key) ? '✓' : '+' }}</span></label
+              >
+            </fieldset>
+            <p class="outreach-small">Your saved interests and original answers stay preserved.</p>
+            <div class="outreach-actions">
+              <button type="button" class="outreach-text-button" @click="interestsOpen = false">Cancel</button
+              ><button type="submit" class="outreach-primary" :disabled="busy || !newInterests.length">
+                {{ busy ? 'Saving…' : 'Add & continue' }}
+              </button>
+            </div>
+          </form>
+          <template v-else-if="currentAudience">
+            <nav class="question-segments" aria-label="Questionnaire steps">
+              <button
+                v-for="(label, index) in groupLabels"
+                :key="label"
+                type="button"
+                :class="{ active: group === index, passed: group > index }"
+                :aria-current="group === index ? 'step' : null"
+                :disabled="index > group || busy"
+                @click="goGroup(index)"
+              >
+                <span>{{ index + 1 }}</span
+                >{{ label }}
+              </button>
+            </nav>
+            <form v-if="group < 2" :key="currentAudience + ':' + group" ref="questionForm" @submit.prevent="advance">
+              <p class="section-description">
+                {{ group === 0 ? audienceDescription : 'A little context helps us make the next conversation useful.' }}
+              </p>
+              <div class="outreach-questions">
+                <template v-for="f in visibleFields">
+                  <fieldset v-if="f.type === 'checks' || (f.type === 'select' && f.options.length <= 3)" :key="f.key" :disabled="busy">
+                    <legend>{{ f.label }}</legend>
+                    <div class="question-choices">
+                      <label
+                        v-for="o in f.options"
+                        :key="o[0]"
+                        class="question-choice"
+                        :class="{ selected: f.type === 'checks' ? answers[f.key].includes(o[0]) : answers[f.key] === o[0] }"
+                        ><input
+                          v-model="answers[f.key]"
+                          :type="f.type === 'checks' ? 'checkbox' : 'radio'"
+                          :name="f.key"
+                          :value="o[0]"
+                          :required="f.type === 'select'"
+                        /><span>{{ o[1] }}</span
+                        ><span aria-hidden="true" class="choice-mark">{{
+                          (f.type === 'checks' ? answers[f.key].includes(o[0]) : answers[f.key] === o[0]) ? '✓' : ''
+                        }}</span></label
+                      >
+                    </div>
+                  </fieldset>
+                  <fieldset v-else-if="f.type === 'countries'" :key="f.key" :disabled="busy">
+                    <legend>{{ f.label }}</legend>
+                    <input
+                      v-model="countrySearch"
+                      type="search"
+                      placeholder="Find a country"
+                      aria-label="Find operating countries"
+                    /><select v-model="answers[f.key]" multiple size="5" required :aria-label="f.label">
+                      <option v-for="country in filteredCountries" :key="country.code" :value="country.code">{{ country.name }}</option>
+                    </select>
+                    <p class="outreach-small">Choose one or more. {{ answers[f.key].map(countryLabel).join(', ') }}</p>
+                  </fieldset>
+                  <label v-else :key="f.key"
+                    >{{ f.label
+                    }}<select v-if="f.type === 'select'" v-model="answers[f.key]" required :disabled="busy">
+                      <option disabled value="">Select an option</option>
+                      <option v-for="o in f.options" :key="o[0]" :value="o[0]">{{ o[1] }}</option></select
+                    ><textarea
+                      v-else-if="f.type === 'textarea'"
+                      v-model.trim="answers[f.key]"
+                      :maxlength="f.max"
+                      :required="f.key !== 'scope'"
+                      :disabled="busy"
+                      rows="4"
+                    ></textarea
+                    ><input
+                      v-else
+                      v-model.trim="answers[f.key]"
+                      :type="f.type === 'url' ? 'url' : 'text'"
+                      :maxlength="f.max"
+                      :required="f.key !== 'website'"
+                      :disabled="busy"
+                    /><small v-if="f.key === 'investorType'" class="field-help"
+                      >Choose your own profile or the organisation you represent.</small
+                    ></label
+                  >
+                </template>
+                <fieldset
+                  v-if="
+                    group === 1 &&
+                    ((currentAudience === 'investor' && answers.participation !== 'introduction') || currentAudience === 'merchant')
+                  "
+                  :disabled="busy"
+                >
+                  <legend>
+                    {{ currentAudience === 'investor' ? 'What amount are you considering?' : 'Processing volume' }} <small>Optional</small>
+                  </legend>
+                  <p class="outreach-small">
+                    An estimate is fine. You can leave this undecided. This is context for discussion, not a payment or commitment.
+                  </p>
+                  <div class="question-choices">
+                    <label class="question-choice" :class="{ selected: answers.amountStatus !== 'stated' }"
+                      ><input
+                        v-model="answers.amountStatus"
+                        type="radio"
+                        name="amountStatus"
+                        :value="currentAudience === 'investor' ? 'undecided' : 'unknown'"
+                      /><span>{{ currentAudience === 'investor' ? 'Not decided yet' : 'Not sure yet' }}</span></label
+                    ><label class="question-choice" :class="{ selected: answers.amountStatus === 'stated' }"
+                      ><input v-model="answers.amountStatus" type="radio" name="amountStatus" value="stated" /><span
+                        >Share an indicative amount</span
+                      ></label
+                    >
+                  </div>
+                  <div v-if="answers.amountStatus === 'stated'" class="outreach-grid outreach-amount">
+                    <label
+                      >Amount<input
+                        v-model.trim="answers.amount"
+                        type="text"
+                        inputmode="decimal"
+                        pattern="(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?"
+                        maxlength="60"
+                        required
+                        aria-describedby="amount-help" /></label
+                    ><label
+                      >Currency<select v-model="answers.currency" required aria-label="Currency">
+                        <option disabled value="">Choose currency</option>
+                        <option v-for="currency in filteredCurrencies" :key="currency.code" :value="currency.code">
+                          {{ currency.name }} · {{ currency.code }}
+                        </option>
+                      </select></label
+                    ><label class="currency-search"
+                      >Find a currency<input v-model="currencySearch" type="search" placeholder="Search by name or code" /></label
+                    ><label v-if="currentAudience === 'merchant'"
+                      >Volume period<select v-model="answers.period" required>
+                        <option disabled value="">Choose period</option>
+                        <option value="daily">Daily</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="annual">Annual</option>
+                      </select></label
+                    >
+                    <p id="amount-help" class="outreach-small">Use digits and an optional decimal point. No commas or currency symbols.</p>
+                  </div>
+                </fieldset>
+                <label v-if="group === 1"
+                  >When would you consider taking part?<select v-model="answers.timing" required :disabled="busy">
+                    <option disabled value="">Select an option</option>
+                    <option v-for="o in timing" :key="o[0]" :value="o[0]">{{ o[1] }}</option>
+                  </select></label
+                >
+                <label v-if="group === 1"
+                  >What would you like us to know? <small>Optional</small
+                  ><textarea
+                    v-model.trim="answers.message"
+                    maxlength="2000"
+                    rows="3"
+                    :disabled="busy"
+                    placeholder="A question, an introduction, or a little more context."
+                  ></textarea>
+                </label>
+              </div>
+              <div class="outreach-actions">
+                <button
+                  type="button"
+                  class="outreach-text-button"
+                  :disabled="busy"
+                  @click="group ? goGroup(group - 1) : (screen = 'welcome')"
+                >
+                  ← Back</button
+                ><button type="submit" class="outreach-primary" :disabled="busy">
+                  {{ group === 1 ? 'Review your answers' : 'Continue' }} <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            </form>
+            <div v-else class="outreach-review">
+              <p class="section-description">Take a moment to check your answers. Once saved, your original responses stay preserved.</p>
+              <dl>
+                <div v-for="row in reviewRows" :key="row.label">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
+              <div class="outreach-actions">
+                <button type="button" class="outreach-text-button" :disabled="busy" @click="goGroup(1)">← Edit answers</button
+                ><button type="button" class="outreach-primary" :disabled="busy" @click="saveAnswers">
+                  {{ busy ? 'Saving…' : 'Send enquiry' }} <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            </div>
+            <p class="outreach-small draft-status" role="status">
+              {{
+                !state.storageAvailable
+                  ? 'Draft in this page'
+                  : !state.draftStored
+                    ? 'Saving draft…'
+                    : remember
+                      ? 'Draft kept on this device'
+                      : 'Draft kept in this tab'
+              }}
+              · {{ savedCount }} of {{ draft.contact.interests.length }} questionnaires submitted.
+              <button type="button" class="outreach-inline-link" :disabled="busy" @click="reopen">Check saved progress</button>
+            </p>
+          </template>
+          <div v-else-if="complete" class="outreach-complete">
+            <div class="completion-mark" aria-hidden="true">✓</div>
+
+            <p>
+              <template v-if="draft.contact.interests.includes('investor')">The team reviews enquiries before arranging calls.</template
+              ><template v-else>The team will review your enquiry.</template> We’ll use {{ draft.contact.email }} for any follow-up.
+            </p>
+            <ul>
+              <li v-for="audience in draft.contact.interests" :key="audience">{{ audienceLabel(audience) }} <span>Saved ✓</span></li>
+            </ul>
+            <button type="button" class="outreach-text-button" @click="forget">Forget this draft on my device</button>
+          </div>
+          <div v-else>
+            <p>Your answers are saved. Check the latest progress to continue.</p>
+            <button type="button" class="outreach-secondary" :disabled="busy" @click="reopen">Check saved progress</button>
+          </div>
+        </template>
+      </div>
+    </section>
+    <div class="privacy-entry">
+      <button type="button" class="outreach-text-button" @click="privacyOpen = true">Privacy &amp; your enquiry ↗</button>
+    </div>
+    <section v-if="privacyOpen" class="outreach-privacy" aria-labelledby="privacy-heading">
+      <button type="button" class="outreach-text-button" @click="privacyOpen = false">← Return to your enquiry</button>
+      <h2 id="privacy-heading" ref="privacyHeading" tabindex="-1">Your enquiry, thoughtfully handled.</h2>
+      <p>
+        We collect your contact details, selected interests and the answers you choose to save so the INTAFACED team can review and reply to
+        your enquiry. Optional marketing permission is separate.
+      </p>
+      <p>
+        Your original saved answers stay with the team. A local draft helps you finish; it is not a confirmation that an answer has been
+        submitted. Device recovery is optional, encrypted and limited to this browser. It cannot be transferred with a link or recovered by
+        matching an email address.
+      </p>
+      <p v-if="draft">
+        Local access expires {{ expiryLabel }}. You can forget it on this device at any time; this does not delete your saved enquiry.
+      </p>
+      <p v-if="publicInfo.contactUrl">
+        For questions about your saved enquiry or personal information, <a :href="publicInfo.contactUrl">contact the INTAFACED team</a>.
+      </p>
+      <p v-else>You can ask about your saved information or request a correction when the team follows up.</p>
+      <p v-if="publicInfo.retentionNotice">{{ publicInfo.retentionNotice }}</p>
+      <button v-if="resumeAvailable" type="button" class="outreach-secondary" @click="forget">Forget local draft</button>
     </section>
   </div>
 </template>
@@ -225,14 +470,30 @@
 <script>
 import { mutate } from '../../config/intafaced.js';
 let intake = require('../../assets/js/outreach-intake.js');
-let countryOptions = require('../../assets/js/outreach-countries.js').countryOptions;
+let publicInfo = require('../../assets/js/outreach-public-info.js').publicInfo;
+let createDraftStorage = require('../../assets/js/outreach-draft-storage.js').createDraftStorage;
+let countries = require('../../assets/js/outreach-countries.js').countryOptions('en');
 let AUDIENCES = [
   { key: 'investor', path: '/invest', label: 'Investor', description: 'Discuss backing INTAFACED or introduce an investor' },
-  { key: 'trader', path: '/trade', label: 'Trader', description: 'Share your markets and trading interests.' },
+  { key: 'trader', path: '/trade', label: 'Trader', description: 'Share your markets and trading interests' },
   { key: 'merchant', path: '/merchant', label: 'Merchant', description: 'Explore payment acceptance, settlement or payouts' },
   { key: 'academy', path: '/academy', label: 'Academy', description: 'Tell us what you want to learn' },
   { key: 'partner', path: '/partner', label: 'Partner', description: 'Explore a collaboration or partnership' },
 ];
+function currencyOptions() {
+  let codes =
+    typeof Intl.supportedValuesOf === 'function'
+      ? Intl.supportedValuesOf('currency')
+      : ['USD', 'EUR', 'GBP', 'IDR', 'SGD', 'AUD', 'JPY', 'CHF', 'CAD', 'CNY', 'AED'];
+  let names = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'currency' }) : null;
+  return codes
+    .map(function (code) {
+      return { code: code, name: names ? names.of(code) : code };
+    })
+    .sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    });
+}
 export default {
   name: 'IxOutreach',
   data() {
@@ -242,39 +503,66 @@ export default {
     } catch (e) {
       storage = null;
     }
-    let controller = intake.createIntake({
-      storage: storage,
-      crypto: window.crypto,
-      encode: window.btoa.bind(window),
-      now: Date.now,
-      send: function (method, input) {
-        return mutate('ops', 'outreach.' + method, input, null);
-      },
-    });
-    let restored = controller.state.local && controller.state.local.capture;
+    let controller = this.makeController(storage);
     return {
+      publicInfo: publicInfo({ contactUrl: process.env.OUTREACH_CONTACT_URL, retentionNotice: process.env.OUTREACH_RETENTION_NOTICE }),
       controller: controller,
       state: controller.state,
+      screen: 'welcome',
       busy: false,
       error: '',
       errorCode: '',
       audiences: AUDIENCES,
-      countries: countryOptions('en'),
+      countries: countries,
+      currencies: currencyOptions(),
       timing: intake.timing,
-      contact: restored
-        ? Object.assign({ organisationName: '', country: '' }, restored.contact)
-        : {
-            name: '',
-            email: '',
-            organisationName: '',
-            country: '',
-            interests: [intake.audienceForPath(this.$route.path)].filter(Boolean),
-            marketingOptIn: false,
-          },
+      contact: this.emptyContact(),
       answers: {},
+      group: 0,
+      interestsOpen: false,
+      selectedInterests: [],
+      remember: false,
+      persistentAvailable: false,
+      privacyOpen: false,
+      countrySearch: '',
+      currencySearch: '',
+      storageReady: false,
+      expiredDraft: false,
+      forms: {},
+      groups: {},
     };
   },
+  async mounted() {
+    let session;
+    try {
+      session = window.sessionStorage;
+    } catch (e) {
+      session = null;
+    }
+    let storage = await createDraftStorage({
+      session: session,
+      indexedDB: window.indexedDB,
+      crypto: window.crypto,
+      now: Date.now,
+      storageKey: intake.STORAGE_KEY,
+    });
+    this.persistentAvailable = storage.persistentAvailable;
+    this.expiredDraft = storage.expired;
+    // Switch storage before the visitor can submit; restored contact is only displayed on explicit continuation.
+    this.controller = this.makeController(storage);
+    this.state = this.controller.state;
+    let ui = this.state.ui;
+    if (ui) {
+      this.remember = ui.remember;
+      this.forms = ui.forms;
+      this.groups = ui.groups;
+    }
+    this.storageReady = true;
+  },
   computed: {
+    investorEntry() {
+      return intake.audienceForPath(this.$route.path) === 'investor';
+    },
     continuationUnavailable() {
       return /continuation_invalid/.test(this.errorCode);
     },
@@ -282,7 +570,7 @@ export default {
       return this.state.draft;
     },
     resumeAvailable() {
-      return !!(this.state.local && this.state.local.receipt);
+      return !!this.state.local;
     },
     savedCount() {
       return this.draft ? this.draft.questionnaires.length : 0;
@@ -304,25 +592,77 @@ export default {
     fields() {
       return intake.QUESTIONS[this.currentAudience] || [];
     },
+    visibleFields() {
+      return this.group === 0 ? this.fields : [];
+    },
     complete() {
       return this.draft && !!this.draft.completedAt && this.savedCount === this.draft.contact.interests.length;
     },
+    groupLabels() {
+      return ['About you', 'Context', 'Review'];
+    },
     progressLabel() {
       return !this.draft
-        ? 'STEP 1 · YOUR CONTACT'
+        ? '01 / YOUR DETAILS'
         : this.complete
-          ? 'ALL SELECTED QUESTIONS SAVED'
-          : 'STEP ' + (this.savedCount + 2) + ' OF ' + (this.draft.contact.interests.length + 1);
+          ? 'ENQUIRY COMPLETE'
+          : this.audienceLabel(this.currentAudience).toUpperCase() + ' · ' + (this.group + 1) + ' OF 3';
     },
     stepTitle() {
       return !this.draft
-        ? 'Where would you like to take part?'
-        : this.currentAudience
-          ? this.audienceLabel(this.currentAudience) + ' enquiry'
-          : 'Your enquiry';
+        ? 'Tell us about yourself'
+        : this.complete
+          ? 'Your enquiry is with the team.'
+          : this.group === 2
+            ? 'Review your answers'
+            : this.group === 1
+              ? 'Make it personal.'
+              : {
+                  investor: 'Investor enquiry',
+                  trader: 'Tell us about your trading interests',
+                  merchant: 'Tell us about your payment needs',
+                  academy: 'What would you like to learn?',
+                  partner: 'Tell us about a potential collaboration',
+                }[this.currentAudience] || 'Your enquiry';
+    },
+    audienceDescription() {
+      let row = AUDIENCES.find((a) => a.key === this.currentAudience);
+      return row ? row.description + '.' : '';
     },
     expiryLabel() {
       return this.draft ? new Date(this.draft.continuationExpiresAt).toLocaleString() : '';
+    },
+    newInterests() {
+      return this.selectedInterests.filter((a) => !this.draft.contact.interests.includes(a));
+    },
+    filteredCountries() {
+      return this.countries.filter(
+        (c) => c.name.toLowerCase().includes(this.countrySearch.toLowerCase()) || (this.answers.operatingCountries || []).includes(c.code),
+      );
+    },
+    filteredCurrencies() {
+      return this.currencies.filter(
+        (c) => (c.name + ' ' + c.code).toLowerCase().includes(this.currencySearch.toLowerCase()) || c.code === this.answers.currency,
+      );
+    },
+    reviewRows() {
+      let rows = this.fields.map((f) => ({ label: f.label, value: this.reviewValue(f, this.answers[f.key]) }));
+      if (this.currentAudience === 'investor' || this.currentAudience === 'merchant')
+        rows.push({
+          label: this.currentAudience === 'investor' ? 'Indicative contribution' : 'Processing volume',
+          value:
+            this.currentAudience === 'investor' && this.answers.participation === 'introduction'
+              ? 'Not requested for an introduction'
+              : this.answers.amountStatus === 'stated'
+                ? this.answers.amount +
+                  ' ' +
+                  this.answers.currency +
+                  (this.currentAudience === 'merchant' ? ' · ' + this.answers.period : '')
+                : 'Not stated',
+        });
+      rows.push({ label: 'Timing', value: (this.timing.find((o) => o[0] === this.answers.timing) || ['', 'Not selected'])[1] });
+      if (this.answers.message) rows.push({ label: 'Your message', value: this.answers.message });
+      return rows;
     },
   },
   watch: {
@@ -332,98 +672,49 @@ export default {
         this.resetAnswers();
       },
     },
+    answers: {
+      deep: true,
+      handler() {
+        this.storeUi();
+      },
+    },
+    'answers.participation': function (value) {
+      if (value === 'introduction') {
+        this.answers.amountStatus = 'undecided';
+        this.answers.amount = '';
+        this.answers.currency = '';
+      }
+    },
+    remember() {
+      this.storeUi();
+    },
+    privacyOpen(value) {
+      if (value)
+        this.$nextTick(() => {
+          this.$refs.privacyHeading.focus();
+          this.$refs.privacyHeading.scrollIntoView({ block: 'start' });
+        });
+      else this.focusHeading();
+    },
     '$route.path': function (path) {
-      if (!this.draft && !this.state.local) this.contact.interests = [intake.audienceForPath(path)].filter(Boolean);
+      if (!this.draft && !this.state.local) {
+        this.contact.interests = [intake.audienceForPath(path)].filter(Boolean);
+        this.screen = 'welcome';
+      }
     },
   },
   methods: {
-    audienceLabel(a) {
-      let row = AUDIENCES.find(function (v) {
-        return v.key === a;
-      });
-      return row ? row.label : '';
-    },
-    journeyPath(path) {
-      return intake.isJoinHost(window.location.hostname) || ['/invest', '/trade', '/merchant'].includes(path) ? path : '/join' + path;
-    },
-    resetAnswers() {
-      let values = {
-        timing: '',
-        message: '',
-        amountStatus: this.currentAudience === 'merchant' ? 'unknown' : 'undecided',
-        amount: '',
-        currency: '',
-        period: '',
-      };
-      this.fields.forEach(function (f) {
-        values[f.key] = f.type === 'checks' || f.type === 'countries' ? [] : '';
-      });
-      let pending = this.state.local && this.state.local.answer;
-      if (pending && pending.questionnaire.audience === this.currentAudience) {
-        Object.assign(values, pending.questionnaire.answers);
-        ['subjects'].forEach(function (k) {
-          if (Array.isArray(values[k])) values[k] = values[k].join(', ');
-        });
-        let money = values.indicativeContribution || values.processingVolume;
-        if (money)
-          Object.assign(values, {
-            amountStatus: money.status,
-            amount: money.amount || '',
-            currency: money.currency || '',
-            period: money.period || '',
-          });
-      }
-      this.answers = values;
-    },
-    async run(action) {
-      if (this.busy) return;
-      this.busy = true;
-      this.error = '';
-      this.errorCode = '';
-      try {
-        await action();
-        this.$nextTick(function () {
-          if (this.$refs.stepHeading) this.$refs.stepHeading.focus();
-        });
-      } catch (e) {
-        this.errorCode = e.code || 'unreachable';
-        this.error = intake.errorCopy(this.errorCode);
-        this.$nextTick(function () {
-          if (this.$refs.error) this.$refs.error.focus();
-        });
-      } finally {
-        this.busy = false;
-      }
-    },
-    saveContact() {
-      let self = this;
-      return this.run(function () {
-        return self.controller.capture(self.contact, self.$route.query.source);
+    makeController(storage) {
+      return intake.createIntake({
+        storage: storage,
+        crypto: window.crypto,
+        encode: window.btoa.bind(window),
+        now: Date.now,
+        send: (method, input) => mutate('ops', 'outreach.' + method, input, null),
       });
     },
-    saveAnswers() {
-      let self = this;
-      return this.run(function () {
-        return self.controller.answer(intake.buildQuestionnaire(self.currentAudience, self.answers));
-      });
-    },
-    reopen() {
-      let self = this;
-      return this.run(async function () {
-        await self.controller.resume();
-        self.resetAnswers();
-      });
-    },
-    startNew() {
-      if (
-        !window.confirm(
-          'Start a new enquiry? Previously saved information remains with the team. The saved continuation in this browser tab will be removed.',
-        )
-      )
-        return;
-      this.controller.clear();
-      this.error = '';
-      this.contact = {
+    emptyContact() {
+      return {
         name: '',
         email: '',
         organisationName: '',
@@ -432,239 +723,1043 @@ export default {
         marketingOptIn: false,
       };
     },
+    audienceLabel(a) {
+      let row = AUDIENCES.find((v) => v.key === a);
+      return row ? row.label : '';
+    },
+    countryLabel(code) {
+      let row = this.countries.find((c) => c.code === code);
+      return row ? row.name : code;
+    },
+    reviewValue(f, value) {
+      if (Array.isArray(value))
+        return value
+          .map((v) => (f.type === 'countries' ? this.countryLabel(v) : (f.options.find((o) => o[0] === v) || ['', v])[1]))
+          .join(', ');
+      if (f.type === 'select') return (f.options.find((o) => o[0] === value) || ['', value])[1];
+      return value || 'Not provided';
+    },
+    begin() {
+      this.screen = 'contact';
+      this.focusHeading();
+    },
+    beginWithInterests() {
+      this.interestsOpen = true;
+      this.begin();
+    },
+    focusHeading() {
+      this.$nextTick(() => {
+        let heading = this.$refs.stepHeading || this.$refs.welcomeTitle;
+        if (heading) heading.focus();
+      });
+    },
+    resetAnswers() {
+      if (!this.currentAudience) {
+        this.answers = {};
+        this.group = 0;
+        return;
+      }
+      let values = {
+        timing: '',
+        message: '',
+        amountStatus: this.currentAudience === 'merchant' ? 'unknown' : 'undecided',
+        amount: '',
+        currency: '',
+        period: '',
+      };
+      this.fields.forEach((f) => {
+        values[f.key] = f.type === 'checks' || f.type === 'countries' ? [] : '';
+      });
+      let pending = this.state.local && this.state.local.answer;
+      if (pending && pending.questionnaire.audience === this.currentAudience) {
+        Object.assign(values, pending.questionnaire.answers);
+        if (Array.isArray(values.subjects)) values.subjects = values.subjects.join(', ');
+        let money = values.indicativeContribution || values.processingVolume;
+        if (money)
+          Object.assign(values, {
+            amountStatus: money.status,
+            amount: money.amount || '',
+            currency: money.currency || '',
+            period: money.period || '',
+          });
+        delete values.indicativeContribution;
+        delete values.processingVolume;
+      }
+      if (this.forms[this.currentAudience]) Object.assign(values, this.forms[this.currentAudience]);
+      this.answers = values;
+      this.group = this.groups[this.currentAudience] || 0;
+      this.countrySearch = '';
+      this.currencySearch = '';
+    },
+    storeUi() {
+      if (!this.controller || !this.currentAudience) return;
+      this.$set(this.forms, this.currentAudience, JSON.parse(JSON.stringify(this.answers)));
+      this.$set(this.groups, this.currentAudience, this.group);
+      this.controller.saveUi({ forms: this.forms, groups: this.groups, remember: this.remember });
+    },
+    goGroup(index) {
+      this.group = index;
+      this.storeUi();
+      this.focusHeading();
+    },
+    advance() {
+      this.error = '';
+      this.errorCode = '';
+      if (this.group === 0 && this.fields.some((f) => (f.type === 'checks' || f.type === 'countries') && !this.answers[f.key].length)) {
+        this.error = 'Choose at least one option for each required selection.';
+        return;
+      }
+      if (this.group === 1) {
+        try {
+          intake.buildQuestionnaire(this.currentAudience, this.answers);
+        } catch (e) {
+          this.error = intake.errorCopy(e.code);
+          return;
+        }
+      }
+      this.goGroup(this.group + 1);
+    },
+    async run(action) {
+      if (this.busy) return;
+      this.busy = true;
+      this.error = '';
+      this.errorCode = '';
+      try {
+        await action();
+        if (this.draft) {
+          this.draft.questionnaires.forEach((q) => {
+            this.$delete(this.forms, q.audience);
+            this.$delete(this.groups, q.audience);
+          });
+          await this.controller.saveUi({ forms: this.forms, groups: this.groups, remember: this.remember });
+        }
+        this.focusHeading();
+      } catch (e) {
+        this.errorCode = e.code || 'unreachable';
+        this.error = intake.errorCopy(this.errorCode);
+        this.$nextTick(() => {
+          if (this.$refs.error) this.$refs.error.focus();
+        });
+      } finally {
+        this.busy = false;
+      }
+    },
+    saveContact() {
+      if (!this.storageReady) return;
+      this.controller.saveUi({ forms: this.forms, groups: this.groups, remember: this.remember });
+      return this.run(() =>
+        this.controller.capture(this.contact, this.$route.query.source).then(() => {
+          this.interestsOpen = false;
+        }),
+      );
+    },
+    saveAnswers() {
+      return this.run(async () => {
+        await this.controller.answer(intake.buildQuestionnaire(this.currentAudience, this.answers));
+        this.resetAnswers();
+      });
+    },
+    reopen() {
+      return this.run(async () => {
+        if (this.state.local.receipt) await this.controller.resume();
+        else {
+          let capture = this.state.local.capture;
+          await this.controller.capture(capture.contact, capture.sourceKey);
+        }
+        this.interestsOpen = false;
+        this.resetAnswers();
+      });
+    },
+    openAddInterests() {
+      this.selectedInterests = this.draft.contact.interests.slice();
+      this.interestsOpen = true;
+    },
+    saveInterests() {
+      return this.run(async () => {
+        await this.controller.addInterests(this.newInterests);
+        this.interestsOpen = false;
+        this.resetAnswers();
+      });
+    },
+    startNew() {
+      if (!window.confirm('Start a new enquiry? Your saved information stays with the team. This browser will forget the previous draft.'))
+        return;
+      return this.run(async () => {
+        await this.controller.clear();
+        this.error = '';
+        this.errorCode = '';
+        this.contact = this.emptyContact();
+        this.forms = {};
+        this.groups = {};
+        this.answers = {};
+        this.remember = false;
+        this.interestsOpen = !this.contact.interests.length;
+      });
+    },
+    forget() {
+      if (!window.confirm('Forget your local draft? Your saved enquiry stays with the team.')) return;
+      return this.run(async () => {
+        await this.controller.clear();
+        this.contact = this.emptyContact();
+        this.forms = {};
+        this.groups = {};
+        this.answers = {};
+        this.remember = false;
+        this.privacyOpen = false;
+        this.screen = 'welcome';
+      });
+    },
   },
 };
 </script>
 
 <style scoped>
+@font-face {
+  font-family: 'Outreach Inter';
+  src: url('../../assets/fonts/inter-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outreach Inter';
+  src: url('../../assets/fonts/inter-latin-ext.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
 .outreach-page {
-  max-width: 1184px;
-  margin: 0 auto;
-  padding: 64px 24px 80px;
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 64px;
-  color: var(--ix-text);
+  --o-bg: #090a0b;
+  --o-surface: #111413;
+  --o-raised: #181d1a;
+  --o-border: #2a332d;
+  --o-text: #f2f5ef;
+  --o-muted: #a3ada5;
+  --o-accent: #b9f65a;
+  --o-hover: #d0ff87;
+  --o-ink: #11170a;
+  --o-control-border: #5b6657;
+  --ix-orange: var(--o-accent);
+  --ix-orange-soft: rgba(185, 246, 90, 0.14);
+  --ix-radius-sm: 7px;
+  --ix-text: var(--o-text);
+  --ix-hairline: var(--o-border);
+  background: var(--o-bg);
+  color: var(--o-text);
+  font-family: 'Outreach Inter', Inter, Arial, sans-serif;
+  min-height: calc(100svh - 170px);
 }
-.outreach-intro h1 {
-  font-size: clamp(28px, 3vw, 42px);
-  line-height: 1.18;
-  letter-spacing: -0.025em;
-  margin: 20px 0 24px;
-  color: var(--ix-text);
+.outreach-page button,
+.outreach-page input,
+.outreach-page select,
+.outreach-page textarea {
+  font: inherit;
 }
-.outreach-intro > p {
-  line-height: 1.7;
-  max-width: 42ch;
+.outreach-welcome {
+  min-height: calc(100svh - 160px);
+  max-width: 1280px;
+  position: relative;
+  margin: auto;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px 110px;
+}
+.welcome-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 680px;
+  animation: welcome-arrive 0.28s ease-out both;
 }
 .outreach-eyebrow {
-  color: var(--ix-text-dim);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  margin: 0 0 12px;
-}
-.outreach-small {
-  font-size: 12px;
-  color: var(--ix-text-dim);
+  color: var(--o-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   line-height: 1.7;
-  margin: 12px 0;
+  margin: 0 0 20px;
 }
-.outreach-journeys {
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--o-accent);
+  margin: 0 7px 1px 0;
+}
+.welcome-content h1 {
+  color: var(--o-text);
+  font-size: clamp(48px, 6.2vw, 86px);
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 1.04;
+  margin: 0 0 24px;
+  text-wrap: balance;
+}
+.welcome-content h1 span {
+  color: var(--o-text);
+}
+.welcome-description {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #c4ccc2;
+  max-width: 53ch;
+  margin: 0 auto 30px;
+  text-wrap: balance;
+}
+.outreach-sculpture {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.66;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, #000 10%, #000 82%, transparent);
+}
+.sculpture-ring {
+  position: absolute;
+  width: 630px;
+  height: 330px;
+  border: 50px solid #212921;
+  border-radius: 50%;
+  transform: rotate(-32deg);
+  box-shadow:
+    inset 5px 12px 15px #e6ffaf,
+    inset -20px -12px 35px #030604,
+    2px -4px 12px #afdb6b,
+    0 18px 32px #000,
+    0 -8px 25px #6e893b;
+  background: transparent;
+}
+.ring-a {
+  top: -220px;
+  right: -155px;
+  opacity: 0.8;
+  transform: rotate(-35deg) scale(1.2);
+}
+.ring-b {
+  bottom: -270px;
+  left: -160px;
+  transform: rotate(-35deg) scale(1.6);
+  opacity: 0.55;
+}
+.ring-c {
+  top: 28%;
+  right: -340px;
+  transform: rotate(-35deg) scale(0.8);
+  opacity: 0.35;
+}
+.welcome-footer {
+  position: absolute;
+  bottom: 35px;
+  left: 32px;
+  right: 32px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0 20px;
-  border-top: 1px solid var(--ix-hairline);
-  margin-top: 32px;
-  padding-top: 16px;
+  justify-content: space-between;
+  color: #859080;
+  font-size: 9px;
+  letter-spacing: 0.16em;
 }
-.outreach-journeys a {
-  color: var(--ix-text);
-  padding: 12px 0;
+.outreach-workspace {
+  max-width: 1160px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: 285px minmax(0, 1fr);
+  gap: 90px;
+  padding: 64px 32px 88px;
+}
+.outreach-rail h2 {
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.045em;
+  color: var(--o-text);
+  margin: 0 0 20px;
+}
+.outreach-rail > p {
+  font-size: 13px;
+  color: var(--o-muted);
+  line-height: 1.8;
+}
+.journey-steps {
+  list-style: none;
+  padding: 0;
+  margin: 40px 0 45px;
+}
+.journey-steps li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  color: var(--o-muted);
+  font-size: 13px;
+  border-top: 1px solid var(--o-border);
+}
+.journey-steps li:last-child {
+  border-bottom: 1px solid var(--o-border);
+}
+.journey-steps li > span {
+  font-size: 10px;
+  color: #899581;
+}
+.journey-steps .active {
+  color: var(--o-text);
+}
+.journey-steps .active > span,
+.journey-steps .done > span {
+  color: var(--o-accent);
+}
+.journey-steps small {
+  margin-left: auto;
+  font-size: 10px;
+}
+.outreach-rail .rail-note {
+  font-size: 11px;
+  margin-bottom: 28px;
 }
 .outreach-form-panel {
-  border: 1px solid var(--ix-hairline-strong);
-  background: var(--ix-surface);
-  padding: 32px;
   min-width: 0;
 }
-.outreach-form-panel h2 {
-  font-size: 22px;
-  margin: 0 0 24px;
-  color: var(--ix-text);
+.outreach-form-panel > h1 {
+  font-weight: 500;
+  color: var(--o-text);
+  font-size: clamp(28px, 3vw, 38px);
+  letter-spacing: -0.045em;
+  line-height: 1.18;
+  margin: 0 0 16px;
+  outline: none;
 }
-.outreach-form-panel form {
+.section-description {
+  color: var(--o-muted);
+  font-size: 13px;
+  line-height: 1.8;
+  margin-bottom: 28px;
+  max-width: 58ch;
+}
+.outreach-small {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--o-muted);
+  margin: 12px 0;
+}
+.outreach-page form {
   margin: 0;
 }
-.outreach-form-panel fieldset {
+.outreach-page fieldset {
+  min-width: 0;
   border: 0;
   padding: 0;
   margin: 0 0 24px;
-  min-width: 0;
 }
-.outreach-form-panel legend {
-  font-size: 14px;
-  font-weight: 600;
+.outreach-page legend {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--o-text);
   margin-bottom: 12px;
 }
-.outreach-form-panel legend span {
-  display: block;
-  font-size: 12px;
+.outreach-page legend small,
+.outreach-grid label small,
+.outreach-questions label small {
+  color: var(--o-muted);
+  font-size: 10px;
   font-weight: 400;
-  color: var(--ix-text-dim);
-  margin-top: 4px;
-}
-.outreach-form-panel label {
-  display: block;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.outreach-form-panel label small {
-  display: block;
-  color: var(--ix-text-dim);
-}
-.outreach-form-panel input:not([type='checkbox']),
-.outreach-form-panel select,
-.outreach-form-panel textarea {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 8px;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  border: 1px solid var(--ix-hairline-strong);
-  border-radius: var(--ix-radius);
-  background: var(--ix-bg);
-  color: var(--ix-text);
-  font: inherit;
-}
-.outreach-form-panel textarea {
-  resize: vertical;
-}
-.outreach-form-panel input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  accent-color: var(--ix-orange);
-  margin: 3px 0 0;
-}
-.outreach-interest {
-  display: flex !important;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--ix-hairline-strong);
-  margin-bottom: 8px;
-  cursor: pointer;
-}
-.outreach-interest.selected {
-  border-color: var(--ix-orange);
-}
-.outreach-interest strong {
-  display: block;
-  font-size: 14px;
+  margin-left: 6px;
 }
 .outreach-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 18px;
+  margin: 26px 0;
+}
+.outreach-grid label,
+.outreach-questions > label,
+.outreach-amount label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--o-text);
+  line-height: 1.7;
+}
+.outreach-page input:not([type='checkbox']):not([type='radio']),
+.outreach-page select,
+.outreach-page textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 8px;
+  min-height: 46px;
+  padding: 11px 13px;
+  background: var(--o-surface) !important;
+  border: 1px solid var(--o-control-border) !important;
+  border-radius: 7px;
+  color: var(--o-text) !important;
+  font-size: 13px;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.outreach-page input::placeholder,
+.outreach-page textarea::placeholder {
+  color: #899581 !important;
+}
+.outreach-page select {
+  appearance: auto;
+  color-scheme: dark;
+}
+.outreach-page select[multiple] {
+  min-height: 160px;
+}
+.outreach-page textarea {
+  resize: vertical;
+}
+.outreach-page input:hover,
+.outreach-page select:hover,
+.outreach-page textarea:hover {
+  border-color: #53604c;
+}
+.outreach-page :is(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid var(--o-accent);
+  outline-offset: 4px;
+}
+.outreach-page input[type='checkbox'],
+.outreach-page input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--o-accent);
+  flex: 0 0 auto;
+}
+.selected-interest-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-block: 1px solid var(--o-border);
+  font-size: 12px;
+  margin: 22px 0;
+}
+.selected-interest-summary > span {
+  min-width: 0;
+}
+.saved-summary {
   margin: 24px 0;
+  font-size: 11px;
+  color: var(--o-muted);
+}
+.saved-dot {
+  color: var(--o-accent);
+  margin-right: 5px;
+}
+.outreach-interest {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid var(--o-control-border);
+  background: var(--o-surface);
+  padding: 17px;
+  margin: 8px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.outreach-interest > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.outreach-interest strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+}
+.outreach-interest small {
+  display: block;
+  color: var(--o-muted);
+  font-size: 11px;
+  margin-top: 4px;
+  line-height: 1.7;
+}
+.outreach-interest.selected,
+.question-choice.selected {
+  border-color: #789a45;
+  background: #172010;
+}
+.choice-mark {
+  color: var(--o-accent);
+  font-size: 13px;
+  margin-left: auto;
 }
 .outreach-consent {
-  display: flex !important;
-  gap: 12px;
-  align-items: start;
-  margin: 12px 0;
+  min-height: 44px;
+  padding-top: 5px;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #c4ccc2;
+  margin: 18px 0 0;
   cursor: pointer;
+}
+.outreach-consent input {
+  margin-top: 3px;
+}
+.consent-help {
+  margin: 5px 0 22px 27px;
+}
+.outreach-primary,
+.outreach-secondary {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  min-height: 46px;
+  padding: 13px 20px;
+  border-radius: 7px;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.outreach-primary {
+  color: var(--o-ink);
+  background: var(--o-accent);
+  border: 1px solid var(--o-accent);
+}
+.outreach-primary:hover:not(:disabled) {
+  background: var(--o-hover);
+  border-color: var(--o-hover);
+  transform: translateY(-1px);
+}
+.outreach-secondary {
+  background: var(--o-raised);
+  color: var(--o-text);
+  border: 1px solid var(--o-border);
+}
+.outreach-text-button {
+  border: 0;
+  background: none;
+  color: var(--o-muted);
+  padding: 10px 0;
+  font-size: 11px !important;
+  cursor: pointer;
+  min-height: 44px;
+  text-align: left;
+}
+.outreach-text-button:hover {
+  color: var(--o-text);
+}
+.outreach-inline-link {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #66735b;
+  color: var(--o-text);
+  font-size: inherit !important;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.outreach-page button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+.outreach-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 22px;
+  margin-top: 20px;
+  border-top: 1px solid var(--o-border);
+}
+.question-segments {
+  display: flex;
+  gap: 8px;
+  margin: 28px 0 32px;
+}
+.question-segments button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  background: none;
+  border: 0;
+  border-top: 2px solid var(--o-border);
+  padding: 11px 0;
+  color: var(--o-muted);
+  text-align: left;
+  font-size: 10px !important;
+  min-height: 44px;
+  cursor: pointer;
+}
+.question-segments button span {
+  font-size: 9px;
+}
+.question-segments button.active {
+  border-color: var(--o-accent);
+  color: var(--o-text);
+}
+.question-segments button.passed {
+  border-color: #72874f;
+}
+.question-segments button:disabled {
+  opacity: 1;
+  color: #758174;
 }
 .outreach-questions {
   display: grid;
-  gap: 24px;
+  gap: 25px;
+  animation: question-arrive 0.18s ease-out;
 }
 .outreach-questions fieldset {
   margin: 0;
 }
-.outreach-primary,
-.outreach-secondary {
-  min-height: 44px;
-  font: inherit;
-  font-size: 13px;
-  padding: 12px 16px;
-  border: 1px solid var(--ix-hairline-strong);
-  cursor: pointer;
-  margin-top: 24px;
-}
-.outreach-primary {
-  width: 100%;
+.question-choices {
   display: flex;
-  justify-content: space-between;
-  background: var(--ix-orange);
-  color: var(--ix-on-accent);
-  border-color: var(--ix-orange);
-  font-weight: 600;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.outreach-secondary {
-  background: var(--ix-surface-raised);
-  color: var(--ix-text);
-}
-.outreach-page :focus-visible {
-  outline: 2px solid var(--ix-orange);
-  outline-offset: 3px;
-}
-.outreach-page :disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-.outreach-notice {
-  padding: 16px;
-  border: 1px solid var(--ix-hairline-strong);
-  color: var(--ix-text);
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-.outreach-saved {
-  font-size: 14px;
+.question-choice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 130px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid var(--o-control-border);
+  border-radius: 7px;
+  background: var(--o-surface);
+  font-size: 11px;
   line-height: 1.6;
+  cursor: pointer;
 }
-.outreach-complete p {
-  line-height: 1.7;
-}
-.outreach-complete ul {
-  padding-left: 20px;
-  line-height: 2;
-  margin-top: 16px;
-}
-.outreach-form-panel progress {
-  width: 100%;
-  height: 6px;
-  accent-color: var(--ix-orange);
-}
-.outreach-amount {
-  grid-template-columns: 1fr 1fr;
-  margin-bottom: 0;
-}
-.outreach-amount > p {
-  grid-column: 1 / -1;
+.question-choice input {
   margin: 0;
 }
-@media (max-width: 900px) {
-  .outreach-page {
-    grid-template-columns: 1fr;
-    gap: 32px;
-    padding-top: 32px;
+.currency-search {
+  grid-column: 1/-1;
+}
+#amount-help {
+  grid-column: 1/-1;
+  margin: 0;
+}
+.outreach-review dl {
+  margin: 24px 0;
+}
+.outreach-review dl > div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--o-border);
+}
+.outreach-review dt {
+  font-size: 10px;
+  color: var(--o-muted);
+  margin-bottom: 5px;
+}
+.outreach-review dd {
+  margin: 0;
+  color: var(--o-text);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.outreach-notice {
+  color: #f1dabc;
+  background: #271f12;
+  border: 1px solid #6c532b;
+  border-radius: 8px;
+  padding: 14px;
+  margin: 20px 0;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.outreach-resume {
+  font-size: 13px;
+  color: var(--o-muted);
+  line-height: 1.8;
+  padding: 24px 0;
+}
+.outreach-resume .outreach-text-button {
+  display: block;
+  margin-top: 12px;
+}
+.outreach-complete {
+  padding: 25px 0;
+}
+.completion-mark {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #627c3d;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  color: var(--o-accent);
+  font-size: 19px;
+  margin-bottom: 25px;
+  background: #172010;
+}
+.outreach-complete h2 {
+  color: var(--o-text);
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  font-weight: 500;
+  margin-bottom: 22px;
+}
+.outreach-complete p {
+  max-width: 48ch;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--o-muted);
+}
+.outreach-complete ul {
+  list-style: none;
+  padding: 0;
+  margin: 25px 0;
+}
+.outreach-complete li {
+  border-bottom: 1px solid var(--o-border);
+  padding: 13px 0;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+.outreach-complete li span {
+  color: var(--o-accent);
+  font-size: 10px;
+}
+.outreach-privacy {
+  max-width: 700px;
+  margin: 0 auto;
+  border-top: 1px solid var(--o-border);
+  padding: 40px 24px 60px;
+}
+.outreach-privacy h2 {
+  color: var(--o-text);
+  font-size: 27px;
+  line-height: 1.3;
+  margin: 20px 0;
+  letter-spacing: -0.03em;
+}
+.outreach-privacy p {
+  color: var(--o-muted);
+  font-size: 13px;
+  line-height: 1.9;
+}
+.outreach-privacy a {
+  color: var(--o-accent);
+  text-decoration: underline;
+}
+.field-help {
+  display: block;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--o-muted);
+  margin: 6px 0 0 !important;
+}
+.saved-contact-details {
+  color: var(--o-muted);
+  margin: -10px 0 22px;
+  font-size: 11px;
+}
+.saved-contact-details summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.saved-contact-details summary:focus-visible {
+  outline: 2px solid var(--o-accent);
+  outline-offset: 3px;
+}
+.saved-contact-details dl > div {
+  display: flex;
+  gap: 15px;
+  padding: 7px 0;
+}
+.saved-contact-details dt {
+  width: 80px;
+}
+.saved-contact-details dd {
+  color: var(--o-text);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.saved-contact-details a {
+  color: var(--o-accent);
+  text-decoration: underline;
+}
+.draft-status {
+  margin-top: 26px;
+}
+.expiry-notice {
+  max-width: 700px;
+  margin: 20px auto;
+}
+.privacy-entry {
+  max-width: 1160px;
+  padding: 0 32px 24px;
+  margin: auto;
+  text-align: right;
+}
+.is-welcome .privacy-entry {
+  position: relative;
+  margin-top: -34px;
+  padding-bottom: 12px;
+  z-index: 2;
+}
+@keyframes welcome-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
   }
-  .outreach-intro > p {
-    max-width: 60ch;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
-@media (max-width: 520px) {
-  .outreach-page {
-    padding: 24px 16px 48px;
+@keyframes question-arrive {
+  from {
+    opacity: 0.5;
+    transform: translateY(5px);
   }
-  .outreach-form-panel {
-    padding: 20px 16px;
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 900px) {
+  .outreach-workspace {
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 38px;
+    padding: 42px 24px 70px;
+  }
+}
+@media (max-width: 680px) {
+  .outreach-welcome {
+    min-height: calc(100svh - 120px);
+    padding: 80px 24px 120px;
+    align-items: center;
+  }
+  .welcome-content h1 {
+    font-size: 58px;
+  }
+  .welcome-description {
+    font-size: 13px;
+    max-width: 34ch;
+    line-height: 1.9;
+  }
+  .ring-a {
+    width: 450px;
+    right: -290px;
+    top: -170px;
+  }
+  .ring-b {
+    left: -270px;
+    bottom: -310px;
+    opacity: 0.55;
+  }
+  .ring-c {
+    display: none;
+  }
+  .welcome-footer {
+    left: 24px;
+    right: 24px;
+    bottom: 30px;
+    font-size: 8px;
+  }
+  .welcome-footer span:last-child {
+    display: none;
+  }
+  .outreach-workspace {
+    display: block;
+    padding: 28px 22px 60px;
+  }
+  .outreach-rail > h2,
+  .outreach-rail > p,
+  .outreach-rail > .outreach-eyebrow,
+  .outreach-rail > .outreach-text-button {
+    display: none;
+  }
+  .journey-steps {
+    display: flex;
+    margin: 0 0 33px;
+    gap: 12px;
+  }
+  .journey-steps li {
+    flex: 1;
+    border: 0;
+    min-height: 30px;
+    gap: 6px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .journey-steps li:last-child {
+    border: 0;
+  }
+  .journey-steps li > span {
+    font-size: 8px;
+  }
+  .journey-steps small {
+    display: none;
   }
   .outreach-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 19px;
+  }
+  .outreach-form-panel > h1 {
+    font-size: 30px;
+  }
+  .selected-interest-summary {
+    font-size: 11px;
+  }
+  .outreach-primary {
+    padding: 13px 16px;
+  }
+  .question-choice {
+    flex-basis: 120px;
+  }
+  .outreach-page input:not([type='checkbox']):not([type='radio']),
+  .outreach-page select,
+  .outreach-page textarea {
+    font-size: 16px;
+  }
+  .outreach-actions {
+    position: relative;
+    padding-top: 20px;
+  }
+  .outreach-page {
+    scroll-padding-bottom: 20px;
+  }
+}
+@media (max-width: 360px) {
+  .welcome-content h1 {
+    font-size: 49px;
+  }
+  .outreach-workspace {
+    padding-inline: 16px;
+  }
+  .outreach-primary {
+    padding-inline: 13px;
+    font-size: 11px !important;
+  }
+  .outreach-actions {
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .outreach-page * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }
 </style>

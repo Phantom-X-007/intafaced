@@ -8,10 +8,10 @@ let DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/;
 let CAPABILITY = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 let UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let timing = [
-  ['as_available', 'As available'],
+  ['as_available', 'When available'],
   ['within_three_months', 'Within three months'],
   ['later', 'Later'],
-  ['undecided', 'Undecided'],
+  ['undecided', 'I’m not sure yet'],
 ];
 function choices(values) {
   return values.map(function (v) {
@@ -28,9 +28,24 @@ function field(key, label, type, options, max) {
 }
 let QUESTIONS = {
   investor: [
-    field('investorType', 'Investor type', 'select', choices(['individual', 'family_office', 'fund', 'strategic', 'other'])),
-    field('participation', 'How would you like to participate?', 'select', choices(['direct', 'introduction', 'both'])),
-    field('decisionRole', 'Your decision-making role', 'select', choices(['decision_maker', 'adviser', 'introducer', 'other'])),
+    field('participation', 'Are you considering investing or making an introduction?', 'select', [
+      ['direct', 'I’m considering investing'],
+      ['introduction', 'I can introduce an investor'],
+      ['both', 'Both'],
+    ]),
+    field('investorType', 'Which best describes you or the organisation you represent?', 'select', [
+      ['individual', 'Individual'],
+      ['family_office', 'Family office'],
+      ['fund', 'Investment fund'],
+      ['strategic', 'Strategic investor'],
+      ['other', 'Other'],
+    ]),
+    field('decisionRole', 'What is your role in the decision?', 'select', [
+      ['decision_maker', 'I make investment decisions'],
+      ['adviser', 'I advise on investment decisions'],
+      ['introducer', 'I make introductions'],
+      ['other', 'Other'],
+    ]),
   ],
   trader: [
     field(
@@ -270,7 +285,8 @@ function errorCopy(code) {
     return 'Your enquiry changed in another request. Reopen the saved enquiry to see the latest progress.';
   if (/rate_limited/.test(code)) return 'Too many attempts. Wait one minute, then try again.';
   if (code === 'invalid_input')
-    return 'Check the required fields, selections, country codes and amount format. Amounts use digits and an optional decimal point.';
+    return 'Check the required fields, selections and amount format. Amounts use digits and an optional decimal point.';
+  if (code === 'draft_forget_failed') return 'We could not remove the local draft from this browser. Try again before leaving this device.';
   if (code === 'secure_browser_required') return 'A secure browser connection is required. Open this page over HTTPS in a current browser.';
   return 'We could not confirm this save. Your entries remain here. Try again with the same entries to safely check the result.';
 }
@@ -307,29 +323,120 @@ function validSavedAnswer(input, saved) {
   if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1 || input.expectedRevision > saved.receipt.revision)
     return false;
   return validDraft(
-    Object.assign({}, saved.receipt, { contact: saved.capture.contact, questionnaires: [input.questionnaire], completedAt: null }),
+    Object.assign({}, saved.receipt, {
+      contact: Object.assign({}, saved.capture.contact, { interests: saved.selectedInterests || saved.capture.contact.interests }),
+      questionnaires: [input.questionnaire],
+      completedAt: null,
+    }),
+  );
+}
+function validUi(ui) {
+  if (
+    !exactKeys(ui, ['forms', 'groups', 'remember']) ||
+    typeof ui.remember !== 'boolean' ||
+    !ui.forms ||
+    !ui.groups ||
+    JSON.stringify(ui).length > 64000
+  )
+    return false;
+  return (
+    Object.keys(ui.forms).every(function (a) {
+      if (!AUDIENCES.includes(a) || !ui.forms[a] || typeof ui.forms[a] !== 'object') return false;
+      let allowed = QUESTIONS[a]
+        .map(function (f) {
+          return f.key;
+        })
+        .concat(['timing', 'message', 'amountStatus', 'amount', 'currency', 'period']);
+      return Object.keys(ui.forms[a]).every(function (k) {
+        let v = ui.forms[a][k];
+        return (
+          allowed.includes(k) &&
+          (typeof v === 'string'
+            ? v.length <= 8090
+            : Array.isArray(v) &&
+              v.length <= 50 &&
+              v.every(function (s) {
+                return typeof s === 'string' && s.length <= 80;
+              }))
+        );
+      });
+    }) &&
+    Object.keys(ui.groups).every(function (a) {
+      return AUDIENCES.includes(a) && Number.isInteger(ui.groups[a]) && ui.groups[a] >= 0 && ui.groups[a] <= 2;
+    })
+  );
+}
+function validExtension(input, saved) {
+  return (
+    !!saved.receipt &&
+    exactKeys(input, ['requestId', 'submissionId', 'continuationToken', 'expectedRevision', 'interests']) &&
+    UUID.test(input.requestId) &&
+    input.submissionId === saved.receipt.submissionId &&
+    input.continuationToken === saved.continuationToken &&
+    Number.isInteger(input.expectedRevision) &&
+    input.expectedRevision >= 1 &&
+    input.expectedRevision <= saved.receipt.revision &&
+    Array.isArray(input.interests) &&
+    input.interests.length >= 1 &&
+    input.interests.length <= 5 &&
+    new Set(input.interests).size === input.interests.length &&
+    input.interests.every(function (a) {
+      return AUDIENCES.includes(a);
+    })
   );
 }
 function createIntake(options) {
-  let state = { local: null, draft: null, busy: false, storageAvailable: true };
+  let state = { local: null, draft: null, busy: false, storageAvailable: true, ui: null, expired: false, draftStored: false };
+  let persistence = Promise.resolve();
+  let persistenceRevision = 0;
   function persist() {
+    state.draftStored = false;
+    let revision = ++persistenceRevision;
     try {
-      options.storage.setItem(STORAGE_KEY, JSON.stringify(state.local));
+      persistence = Promise.resolve(options.storage.setItem(STORAGE_KEY, JSON.stringify(state.local)))
+        .then(function () {
+          if (revision === persistenceRevision) state.draftStored = true;
+        })
+        .catch(function () {
+          state.storageAvailable = false;
+        });
     } catch (e) {
       state.storageAvailable = false;
     }
   }
   function read() {
+    function discardStored() {
+      Promise.resolve(options.storage.removeItem(STORAGE_KEY)).catch(function () { state.storageAvailable = false; });
+    }
     try {
       let raw = options.storage.getItem(STORAGE_KEY);
       if (!raw) return;
       let saved = JSON.parse(raw);
       if (
-        !exactKeys(saved, ['continuationToken', 'expiresAt', 'capture', 'receipt', 'answer']) ||
+        !exactKeys(
+          saved,
+          ['continuationToken', 'expiresAt', 'capture', 'receipt', 'answer'].concat(
+            saved.ui === undefined ? [] : ['ui'],
+            saved.selectedInterests === undefined ? [] : ['selectedInterests'],
+            saved.extension === undefined ? [] : ['extension'],
+          ),
+        ) ||
         !validSavedCapture(saved.capture, saved.continuationToken) ||
+        (saved.selectedInterests !== undefined &&
+          (!Array.isArray(saved.selectedInterests) ||
+            saved.selectedInterests.length > 5 ||
+            new Set(saved.selectedInterests).size !== saved.selectedInterests.length ||
+            !saved.selectedInterests.every(function (a) {
+              return AUDIENCES.includes(a);
+            }) ||
+            !saved.capture.contact.interests.every(function (a, i) {
+              return saved.selectedInterests[i] === a;
+            }))) ||
+        (saved.ui !== undefined && saved.ui !== null && !validUi(saved.ui)) ||
+        (saved.extension !== undefined && saved.extension !== null && !validExtension(saved.extension, saved)) ||
         !validSavedAnswer(saved.answer, saved)
       ) {
-        options.storage.removeItem(STORAGE_KEY);
+        discardStored();
         return;
       }
       if (saved.receipt !== null) {
@@ -338,7 +445,8 @@ function createIntake(options) {
           saved.expiresAt !== saved.receipt.continuationExpiresAt ||
           Date.parse(saved.expiresAt) <= options.now()
         ) {
-          options.storage.removeItem(STORAGE_KEY);
+          state.expired = timestamp(saved.expiresAt) && Date.parse(saved.expiresAt) <= options.now();
+          discardStored();
           return;
         }
       } else {
@@ -348,6 +456,7 @@ function createIntake(options) {
         saved.expiresAt = null;
       }
       state.local = saved;
+      state.ui = saved.ui || null;
     } catch (e) {
       state.storageAvailable = false;
     }
@@ -368,6 +477,14 @@ function createIntake(options) {
     if (draft.submissionId !== state.local.receipt.submissionId) fail('invalid_response');
     if (state.draft && state.draft.submissionId === draft.submissionId && draft.revision < state.draft.revision) fail('invalid_response');
     state.draft = draft;
+    state.local.selectedInterests = draft.contact.interests.slice();
+    if (
+      state.local.extension &&
+      state.local.extension.interests.every(function (a) {
+        return draft.contact.interests.includes(a);
+      })
+    )
+      state.local.extension = null;
     state.local.receipt = {
       submissionId: draft.submissionId,
       revision: draft.revision,
@@ -404,14 +521,19 @@ function createIntake(options) {
         capture: input,
         receipt: null,
         answer: null,
+        ui: state.ui,
+        extension: null,
+        selectedInterests: contact.interests.slice(),
       };
       persist();
     }
+    await persistence;
     let receipt = await call('capture', state.local.capture, validReceipt);
     if (state.local.receipt && receipt.submissionId !== state.local.receipt.submissionId) fail('invalid_response');
     state.local.receipt = receipt;
     state.local.expiresAt = receipt.continuationExpiresAt;
     persist();
+    await persistence;
     return resume(); // Cached capture receipts can be older than the current draft.
   }
   async function answer(questionnaire) {
@@ -437,20 +559,52 @@ function createIntake(options) {
       };
       persist();
     }
+    await persistence;
     await call('answer', state.local.answer, validDraft);
     return resume(); // Reconcile instead of replacing a newer draft with an old replay.
   }
-  function clear() {
-    state.local = null;
-    state.draft = null;
+  async function addInterests(interests) {
+    if (!state.draft || !state.local) fail('continuation_missing');
+    list(interests, 5, function (a) {
+      return AUDIENCES.includes(a);
+    });
+    let pending = state.local.extension;
+    if (!pending || canonical(pending.interests) !== canonical(interests) || pending.expectedRevision !== state.draft.revision) {
+      state.local.extension = {
+        requestId: options.crypto.randomUUID(),
+        submissionId: state.draft.submissionId,
+        continuationToken: state.local.continuationToken,
+        expectedRevision: state.draft.revision,
+        interests: interests.slice(),
+      };
+      persist();
+    }
+    await persistence;
+    await call('addInterests', state.local.extension, validDraft);
+    return resume();
+  }
+  function saveUi(ui) {
+    if (!validUi(ui)) fail('invalid_input');
+    state.ui = JSON.parse(JSON.stringify(ui));
+    if (state.local) {
+      state.local.ui = state.ui;
+      persist();
+    }
+    return persistence;
+  }
+  async function clear() {
     try {
-      options.storage.removeItem(STORAGE_KEY);
+      await options.storage.removeItem(STORAGE_KEY);
     } catch (e) {
       state.storageAvailable = false;
+      fail('draft_forget_failed');
     }
+    state.local = null;
+    state.draft = null;
+    state.ui = null;
   }
   read();
-  return { state: state, capture: capture, resume: resume, answer: answer, clear: clear };
+  return { state: state, capture: capture, resume: resume, answer: answer, addInterests: addInterests, saveUi: saveUi, clear: clear };
 }
 module.exports = {
   AUDIENCES: AUDIENCES,

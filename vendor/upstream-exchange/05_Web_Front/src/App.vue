@@ -1,5 +1,5 @@
 <template>
-  <div :class="[pageView, { 'is-terminal-route': isTerminalRoute, 'is-money-os-route': isMoneyOsRoute }]">
+  <div :class="[pageView, { 'is-terminal-route': isTerminalRoute, 'is-money-os-route': isMoneyOsRoute, 'is-outreach-route': isOutreachRoute }]">
     <a class="ix-skip-link ix-global-skip" href="#route-main" @click="focusRouteMain">Skip to main content</a>
     <div class="page-content" :class="{ 'is-terminal': isTerminalRoute, 'is-money-os': isMoneyOsRoute }">
       <div class="time_download" style="display: none;">
@@ -10,7 +10,7 @@
         </div>
       </div>
       <header v-if="isOutreachRoute" class="marketing-os-header outreach-shell-header">
-        <router-link to="/join" class="marketing-os-brand">INTAFACED</router-link>
+        <router-link to="/join" class="marketing-os-brand" aria-label="INTAFACED enquiries"><img src="./assets/images/logo.svg" alt="INTAFACED" width="172" height="32" /></router-link>
         <span class="marketing-os-grow"></span>
         <nav aria-label="Enquiry navigation"><router-link to="/invest">Investor enquiries</router-link><router-link to="/join">All interests</router-link></nav>
       </header>
@@ -277,7 +277,7 @@
       <span>© INTAFACED</span>
     </footer>
     <template>
-      <BackTop :bottom="50"></BackTop>
+      <BackTop v-if="!isOutreachRoute" :bottom="50"></BackTop>
     </template>
     <!-- B-CMDK: global route/market palette (⌘K / Ctrl+K). iView-free panel; tokens only. -->
     <CommandPalette v-if="!isOutreachRoute" />
@@ -2749,4 +2749,21 @@ body, #app, .page-view, .page-view2, .page-content {
 .footer_content { height: auto !important; padding: 0 !important; }
 @media (max-width: 1280px) { .public-footer { margin: 0 48px; } }
 @media (max-width: 600px) { .public-footer { margin: 0 20px; gap: 16px; padding: 24px 0; } .public-footer > span:first-of-type { flex-basis: 100%; } .public-footer nav { margin-left: 0; } .public-footer > span:last-child { margin-left: auto; } }
+</style>
+
+<style>
+.is-outreach-route { --ix-orange:#b9f65a; --ix-text:#f2f5ef; background:#090a0b!important; }
+.is-outreach-route .page-content { background:#090a0b!important; padding-bottom:0!important; }
+.is-outreach-route .outreach-shell-header { width:calc(100% - 64px); max-width:1216px; height:74px; margin:20px auto 0; padding:0 28px; border:1px solid #2a332d; border-radius:15px; background:#101211; font-family:'Outreach Inter',Inter,Arial,sans-serif; }
+.outreach-shell-header .marketing-os-brand { display:flex; align-items:center; }
+.outreach-shell-header .marketing-os-brand img { display:block; width:172px; height:32px; }
+.outreach-shell-header nav a { color:#a3ada5!important; font-size:11px; min-height:44px; display:flex; align-items:center; }
+.outreach-shell-header nav a:hover { color:#b9f65a!important; }
+.is-outreach-route .public-footer { border-color:#2a332d; color:#a3ada5; font-family:'Outreach Inter',Inter,Arial,sans-serif; margin:0 auto; padding:22px 24px; max-width:1216px; }
+@media(max-width:1280px) { .is-outreach-route .outreach-shell-header { margin-inline:24px; width:calc(100% - 48px); } }
+@media(max-width:680px) { .is-outreach-route .outreach-shell-header { width:calc(100% - 32px); height:62px; margin:12px 16px 0; padding:0 16px; border-radius:12px; } .outreach-shell-header .marketing-os-brand img { width:148px; height:28px; } .outreach-shell-header nav a:first-child { display:none; } .outreach-shell-header nav a { font-size:10px; } .is-outreach-route .public-footer { margin-inline:22px; padding-inline:0; font-size:9px; gap:12px; } .is-outreach-route .public-footer-brand { font-size:11px; } }
+</style>
+
+<style>
+body:has(.is-outreach-route) .ivu-loading-bar-inner { background:#b9f65a!important; }
 </style>
