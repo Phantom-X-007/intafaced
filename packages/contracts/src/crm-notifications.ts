@@ -23,11 +23,17 @@ export const crmMessageSchema = z
     submissionId: id,
     kind: crmQueueMessageInputSchema.shape.kind,
     actorUserId: id,
-    status: z.enum(['pending', 'unconfigured', 'accepted', 'delivered', 'failed', 'unresolved']),
+    status: z.enum(['pending', 'unconfigured', 'accepted', 'failed', 'unresolved']),
     createdAt: timestamp,
     notification: guestNotificationReceiptSchema.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.notification !== null && value.notification.businessKey !== `staff_message:${value.id}`)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Notification evidence must belong to this queued message' });
+    if (value.status === 'accepted' && value.notification?.status !== 'accepted')
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Acceptance requires a verified gateway receipt' });
+  });
 export const crmQueueMessageReceiptSchema = z
   .object({
     opportunity: crmOpportunitySchema,
