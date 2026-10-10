@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   accountControlInputSchema,
+  accountControlHistoryInputSchema,
+  accountControlLookupInputSchema,
   accountControlResultSchema,
   accountOperatorEntitlementSchema,
   currentAuthorityInputSchema,
@@ -189,6 +191,13 @@ describe('founder account-control wire boundary', () => {
 });
 
 describe('current authority snapshot', () => {
+  it('binds operator inspection to a strict target and an explicit bounded history limit', () => {
+    const target = { area: 'identity', userId: USER };
+    expect(accountControlLookupInputSchema.safeParse({ target }).success).toBe(true);
+    expect(accountControlLookupInputSchema.safeParse({ target, actorUserId: USER }).success).toBe(false);
+    expect(accountControlHistoryInputSchema.safeParse({ target, limit: 50 }).success).toBe(true);
+    for (const limit of [undefined, 0, 201]) expect(accountControlHistoryInputSchema.safeParse({ target, limit }).success).toBe(false);
+  });
   it('keeps revocable operator entitlement distinct from session and admission authority', () => {
     const enabled = { status: 'enabled', userId: USER, version: '1', changedAt: NOW };
     expect(accountOperatorEntitlementSchema.safeParse(enabled).success).toBe(true);

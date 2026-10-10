@@ -36,6 +36,11 @@ export type AccountControlInput = z.infer<typeof accountControlInputSchema>;
 export const accountControlStateSchema = z.object({ target: accountControlTargetSchema, version, restricted: z.boolean() }).strict();
 export type AccountControlState = z.infer<typeof accountControlStateSchema>;
 
+export const accountControlLookupInputSchema = z.object({ target: accountControlTargetSchema }).strict();
+export const accountControlHistoryInputSchema = accountControlLookupInputSchema
+  .extend({ limit: z.number().int().min(1).max(200) })
+  .strict();
+
 function sameTarget(a: AccountControlTarget, b: AccountControlTarget): boolean {
   if (a.area === 'merchant' && b.area === 'merchant') return a.merchantId === b.merchantId;
   return a.area !== 'merchant' && b.area !== 'merchant' && a.area === b.area && a.userId === b.userId;
@@ -286,6 +291,11 @@ export function recoveryMatchesAdmission(input: unknown, stored: unknown): boole
  */
 export interface AccountControlsContract {
   change(context: Context & { principal: Principal }, input: AccountControlInput): Promise<AccountControlResult>;
+  getState(context: Context & { principal: Principal }, input: { target: AccountControlTarget }): Promise<AccountControlState | null>;
+  history(
+    context: Context & { principal: Principal },
+    input: { target: AccountControlTarget; limit: number },
+  ): Promise<AccountControlResult[]>;
   operatorEntitlement(context: Context, input: { userId: string }): Promise<AccountOperatorEntitlement>;
   currentAuthority(context: Context, input: CurrentAuthorityInput): Promise<CurrentAuthorityResult>;
   admit(context: Context, input: OperationAdmissionInput): Promise<OperationAdmissionResult>;
