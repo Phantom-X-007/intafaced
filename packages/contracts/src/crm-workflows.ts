@@ -7,6 +7,7 @@ import {
   crmTaskSchema,
   crmActivitySchema,
   crmOpportunitySchema,
+  outreachContactCaptureSchema,
 } from './outreach-crm.js';
 
 const id = z.string().uuid();
@@ -256,6 +257,9 @@ export const crmExportPageSchema = z
         z
           .object({
             submission: crmSubmissionSchema,
+            /** Original capture selection/consent; additions never rewrite this. */
+            initialContact: outreachContactCaptureSchema,
+            firstCompletedAt: timestamp.nullable(),
             originalContact: crmContactSchema,
             canonicalContact: crmContactSchema,
             attribution: crmAttributionSchema,
