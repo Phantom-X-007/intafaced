@@ -18,13 +18,16 @@ const PAST = new Date('2020-01-01T00:00:00.000Z');
 const FUTURE = new Date('2099-01-01T00:00:00.000Z');
 const NOW = new Date('2026-08-25T00:00:00.000Z');
 
-const options = { tokens, edgeSecret: EDGE_SECRET, region: 'GB', identityUrl: 'http://identity.test', identityOwnershipSecret: 'edge-test-identity-authority-secret-32' };
+const options = {
+  tokens,
+  edgeSecret: EDGE_SECRET,
+  region: 'GB',
+  identityUrl: 'http://identity.test',
+  identityOwnershipSecret: 'edge-test-identity-authority-secret-32',
+};
 
 async function accessToken(): Promise<string> {
-  const issued = await issueAccessToken(
-    { userId: USER, sessionId: SESSION, scopes: ['trade:read'], tier: 'basic', mfa: false },
-    tokens,
-  );
+  const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'], tier: 'basic', mfa: false }, tokens);
   return issued.token;
 }
 

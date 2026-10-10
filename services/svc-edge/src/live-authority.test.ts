@@ -20,21 +20,21 @@ const subject: CurrentAuthorityInput = { userId, credential: { kind: 'session', 
 const eligible = (input = subject) => {
   const checkedAt = new Date();
   return {
-  status: 'eligible',
-  subject: input,
-  checkedAt: checkedAt.toISOString(),
-  leaseExpiresAt: new Date(checkedAt.getTime() + 4000).toISOString(),
-  account: { userId: input.userId, status: 'active', kycTier: 'none' },
-  credential: {
-    kind: input.credential.kind,
-    ownership: {
-      id: input.credential.kind === 'session' ? input.credential.sessionId : input.credential.apiKeyId,
-      userId: input.userId,
-      revoked: false,
+    status: 'eligible',
+    subject: input,
+    checkedAt: checkedAt.toISOString(),
+    leaseExpiresAt: new Date(checkedAt.getTime() + 4000).toISOString(),
+    account: { userId: input.userId, status: 'active', kycTier: 'none' },
+    credential: {
+      kind: input.credential.kind,
+      ownership: {
+        id: input.credential.kind === 'session' ? input.credential.sessionId : input.credential.apiKeyId,
+        userId: input.userId,
+        revoked: false,
+      },
     },
-  },
-  subAccount: null,
-  version: '0',
+    subAccount: null,
+    version: '0',
   };
 };
 async function bearer(apiKeyId?: string) {

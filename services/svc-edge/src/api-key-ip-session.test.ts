@@ -180,7 +180,11 @@ describe('API key IP allowlist at the session door', () => {
           const url = String(input);
           const authority = currentAuthorityTestReply(input, init, { expectedUserId: USER, expectedCredentialId: KEY });
           if (authority) return authority;
-          if (url.includes('/internal/api-keys/')) return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false, ipAllowlist: [LISTED] }), { status: 200, headers: { 'content-type': 'application/json' } });
+          if (url.includes('/internal/api-keys/'))
+            return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false, ipAllowlist: [LISTED] }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
           if (url.includes('/internal/account/')) {
             return new Response(JSON.stringify({ userId: USER, status: 'active', kycTier: 'none' }), {
               status: 200,
@@ -208,7 +212,11 @@ describe('API key IP allowlist at the session door', () => {
           const url = String(input);
           const authority = currentAuthorityTestReply(input, init, { expectedUserId: USER, expectedCredentialId: KEY });
           if (authority) return authority;
-          if (url.includes('/internal/api-keys/')) return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false, ipAllowlist: [LISTED] }), { status: 200, headers: { 'content-type': 'application/json' } });
+          if (url.includes('/internal/api-keys/'))
+            return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false, ipAllowlist: [LISTED] }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
           if (url.includes('/internal/account/')) {
             return new Response(JSON.stringify({ userId: USER, status: 'active', kycTier: 'none' }), {
               status: 200,

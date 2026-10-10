@@ -70,7 +70,10 @@ describe('enrolled passkey at the HTTP session door', () => {
 
   it('does not impose the owning service passkey gate on an ordinary session', async () => {
     const token = await accessToken();
-    const result = await exchangePrincipal({ authorization: `Bearer ${token}` }, { ...options, fetch: fetchIdentity({ webauthnCreds: [] }) });
+    const result = await exchangePrincipal(
+      { authorization: `Bearer ${token}` },
+      { ...options, fetch: fetchIdentity({ webauthnCreds: [] }) },
+    );
     expect(result.rejected).toBeNull();
     expect(result.principal?.userId).toBe(USER);
     expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeDefined();

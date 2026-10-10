@@ -17,7 +17,13 @@ const SESSION = '22222222-2222-4222-8222-222222222222';
 const LISTED = 'https://app.example.com';
 const FOREIGN = 'https://evil.example';
 
-const options = { tokens, edgeSecret: EDGE_SECRET, region: 'GB', identityUrl: 'http://identity.test', identityOwnershipSecret: 'edge-test-identity-authority-secret-32' };
+const options = {
+  tokens,
+  edgeSecret: EDGE_SECRET,
+  region: 'GB',
+  identityUrl: 'http://identity.test',
+  identityOwnershipSecret: 'edge-test-identity-authority-secret-32',
+};
 
 async function accessToken(): Promise<string> {
   const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'], tier: 'basic', mfa: false }, tokens);

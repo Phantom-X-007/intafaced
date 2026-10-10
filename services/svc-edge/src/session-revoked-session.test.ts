@@ -117,7 +117,10 @@ describe('revoked session at the HTTP session door', () => {
           const authority = currentAuthorityTestReply(input, init, { expectedUserId: USER, expectedCredentialId: KEY });
           if (authority) return authority;
           if (String(input).includes('/internal/api-keys/')) {
-            return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false }), { status: 200, headers: { 'content-type': 'application/json' } });
+            return new Response(JSON.stringify({ id: KEY, userId: USER, revoked: false }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
           }
           expect(String(input)).toContain('/trpc/apiKeys.exchange');
           return new Response(JSON.stringify({ result: { data: { json: { accessToken: keyJwt } } } }), {

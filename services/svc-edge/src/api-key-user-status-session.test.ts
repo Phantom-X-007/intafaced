@@ -15,7 +15,13 @@ const EDGE_SECRET = 'edge-test-principal-secret-32-chars!';
 const USER = '11111111-1111-4111-8111-111111111111';
 const SESSION = '22222222-2222-4222-8222-222222222222';
 
-const options = { tokens, edgeSecret: EDGE_SECRET, region: 'GB', identityUrl: 'http://identity.test', identityOwnershipSecret: 'edge-test-identity-authority-secret-32' };
+const options = {
+  tokens,
+  edgeSecret: EDGE_SECRET,
+  region: 'GB',
+  identityUrl: 'http://identity.test',
+  identityOwnershipSecret: 'edge-test-identity-authority-secret-32',
+};
 
 async function accessToken(): Promise<string> {
   const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'], tier: 'basic', mfa: false }, tokens);
