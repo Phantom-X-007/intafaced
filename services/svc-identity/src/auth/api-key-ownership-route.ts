@@ -4,7 +4,8 @@
  * No permission scopes flatten.
  */
 import type { FastifyInstance } from 'fastify';
-import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
+import { rawBodyOf, retainRawBody, verifyServiceHeaders, SERVICE_HEADER, type ServiceBodyBindMode } from '@intafaced/contracts';
+import { identityWsAuthoritySecret } from '../controls/founder-context.js';
 import type { PlaceDoor } from './place-door.js';
 
 export const API_KEY_OWNERSHIP_PATH = '/internal/api-keys' as const;
@@ -14,6 +15,8 @@ export function registerApiKeyOwnershipRoute(
   opts: {
     door: Pick<PlaceDoor, 'getApiKeyOwnership'>;
     internalSecret: string;
+    privateAuthoritySecret?: string;
+    operationAdmissionSecrets?: Partial<Record<'svc-trade' | 'svc-pay', string>>;
     bodyBind?: ServiceBodyBindMode;
     /** Isolated tests need this. Production `index.ts` already installed via accrue. */
     installRawBody?: boolean;
@@ -23,10 +26,17 @@ export function registerApiKeyOwnershipRoute(
     retainRawBody(app);
   }
   app.get<{ Params: { keyId: string } }>(`${API_KEY_OWNERSHIP_PATH}/:keyId`, async (req, reply) => {
+    const ws = req.headers[SERVICE_HEADER] === 'svc-ws';
+    const secret = ws ? identityWsAuthoritySecret(opts) : opts.internalSecret;
+    const hasBody =
+      req.headers['transfer-encoding'] !== undefined ||
+      (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0');
     if (
-      verifyServiceHeaders(req.headers, opts.internalSecret, {
-        rawBody: rawBodyOf(req),
-        mode: opts.bodyBind,
+      !secret ||
+      (ws && hasBody) ||
+      verifyServiceHeaders(req.headers, secret, {
+        rawBody: ws ? { retained: true, bytes: Buffer.alloc(0) } : rawBodyOf(req),
+        mode: ws ? 'require' : opts.bodyBind,
       }).service === null
     ) {
       return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });

@@ -11,7 +11,7 @@ const ACC = '00000000-0000-4000-8000-000000000003';
 const EXPIRES = new Date('2099-01-01T00:00:00.000Z');
 
 function serviceHeaders(): Record<string, string> {
-  return serviceAuthHeadersForBody('svc-ws', SECRET, '');
+  return serviceAuthHeadersForBody('svc-edge', SECRET, '');
 }
 
 function doorWith(row: ApiKeyOwnershipSnapshot | null) {

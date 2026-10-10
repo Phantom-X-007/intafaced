@@ -33,7 +33,9 @@ import { createApiKeyAttributionRouter } from './api-key-attribution-router.js';
 import { createDisableUserRouter } from './disable-user-router.js';
 import { FounderControls, parseFounderPair } from './controls/founder-controls.js';
 import { createFounderControlsRouter } from './controls/founder-controls-router.js';
-import { createIdentityRequestContext } from './controls/founder-context.js';
+import { createIdentityRequestContext, configuredIdentityOperationOwners } from './controls/founder-context.js';
+import { OperationIdentityDecisions } from './controls/operation-identity-decisions.js';
+import { createOperationIdentityRouter } from './controls/operation-identity-router.js';
 import { createLimitFeeTierRouter } from './limit-fee-tier-router.js';
 import { createOrgRouter } from './org-router.js';
 import { createEnrollPasskeyRouter } from './enroll-passkey-router.js';
@@ -232,6 +234,7 @@ export const appRouter = mergeRouters(
   createApiKeyAttributionRouter(auth),
   createDisableUserRouter(founderControls),
   createFounderControlsRouter(founderControls),
+  createOperationIdentityRouter(new OperationIdentityDecisions(sql)),
   createLimitFeeTierRouter(sql, rank, actionApprovals),
   createOrgRouter(sql, dmaHierarchyLaw),
   createEnrollPasskeyRouter(sql, {
@@ -250,6 +253,11 @@ export const appRouter = mergeRouters(
 export type AppRouter = typeof appRouter;
 
 const identityRequestContext = createIdentityRequestContext({
+  privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+  operationAdmissionSecrets: {
+    'svc-trade': env.IDENTITY_TRADE_ADMISSION_SECRET,
+    'svc-pay': env.IDENTITY_PAY_ADMISSION_SECRET,
+  },
   secret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   internalSecret: env.INTERNAL_SERVICE_SECRET,
@@ -281,6 +289,13 @@ app.get('/ready', async () => ({
   }),
   argon2: await argon2Available(),
   founderControls: founderControls.readiness(),
+  operationAdmission: configuredIdentityOperationOwners({
+    privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+    secret: env.EDGE_PRINCIPAL_SECRET,
+    serviceName: env.SERVICE_NAME,
+    internalSecret: env.INTERNAL_SERVICE_SECRET,
+    operationAdmissionSecrets: { 'svc-trade': env.IDENTITY_TRADE_ADMISSION_SECRET, 'svc-pay': env.IDENTITY_PAY_ADMISSION_SECRET },
+  }),
 }));
 
 /**
@@ -360,6 +375,8 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
  * Bind lists ride as extra JSON fields so WS/edge live-check can read them.
  */
 registerApiKeyOwnershipRoute(app, {
+  privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+  operationAdmissionSecrets: { 'svc-trade': env.IDENTITY_TRADE_ADMISSION_SECRET, 'svc-pay': env.IDENTITY_PAY_ADMISSION_SECRET },
   door: placeDoor,
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   bodyBind: env.INTERNAL_SERVICE_BODY_BIND,

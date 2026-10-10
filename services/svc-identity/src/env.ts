@@ -33,6 +33,11 @@ const schema = serviceEnvSchema
       /** Existing verified platform UUIDs. Missing/malformed/duplicate pair disables controls. */
       IDENTITY_FOUNDER_NITRO_USER_ID: z.string().optional(),
       IDENTITY_FOUNDER_PHANTOM_USER_ID: z.string().optional(),
+      /** Independent owner keys; generic service/read credentials cannot admit operations. */
+      IDENTITY_TRADE_ADMISSION_SECRET: z.string().min(32).optional(),
+      IDENTITY_PAY_ADMISSION_SECRET: z.string().min(32).optional(),
+      /** Dedicated private-stream read key; never the generic or owner admission key. */
+      IDENTITY_WS_AUTHORITY_SECRET: z.string().min(32).optional(),
       /**
        * Registration open? §11 gates this behind the drop sequence.
        * Blank / unset → unpublished; register refuses (`identity.registration_open_unset`).

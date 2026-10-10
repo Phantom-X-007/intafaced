@@ -227,5 +227,39 @@ Service-only POST `accountControls.currentAuthority` checks credential and optio
 subaccount ownership against current identity state. Eligible snapshots expire no
 later than five seconds after the database check, or sooner with the credential.
 Consumers must enforce the returned expiry. This slice does not serialize
-trade/payment admission with freeze or close existing private WebSocket sessions;
-those require the respective service implementations.
+trade/payment admission; bounded private-read leases belong to svc-ws.
+
+Configure `IDENTITY_WS_AUTHORITY_SECRET` separately from generic and admission
+keys. svc-ws supplies that key as `IDENTITY_OWNERSHIP_SECRET`. It authenticates
+only `accountControls.currentAuthority` and GET `/internal/api-keys/:keyId`;
+mixed batches, mutations and aliased keys refuse. No generic money credential
+is required by the public socket process. Other existing service readers keep
+their current authentication.
+
+Apply `drizzle/0026_operation_identity_decisions.sql` for owner operation decisions.
+Set independent `IDENTITY_TRADE_ADMISSION_SECRET` and
+`IDENTITY_PAY_ADMISSION_SECRET` keys, each at least 32 characters and distinct from
+the generic service-signing key and each other. The generic identity read key
+cannot authorize `operationAdmission.decide`. `/ready.operationAdmission` reports
+key configuration only. Missing keys refuse admission; database failures return
+typed `authority.unavailable`.
+
+Owner-only POST `/trpc/operationAdmission.decide` uses strict plain JSON,
+body-bound v2 service authentication and no mixed procedure batch. The owning
+service stores the original immutable business payload and pending identity
+request before calling. Decisions bind the service, operation kind, business ID,
+payload hash, actual user and credential or parent delegation. Fresh grants check
+current active identity and actual credential ownership, revocation, expiry and
+subaccount under the same guard as identity restrictions. Account-bound API keys
+require the matching actual subaccount. Delegated children
+recheck the original strategy credential. Merchant policy authority is vouched
+for by svc-pay and still checks the actual active identity.
+
+Every decision is immutable. `resolve_or_cancel` returns the prior decision or
+records a cancellation tombstone that prevents a delayed first grant. The owning
+service must hold its own restriction guard while finalizing admission and drain
+all pending requests before committing a local restriction. An uncertain network
+outcome retains the pending marker and cannot be reported as a completed local
+restriction. An existing grant resolves only its original payload after freeze;
+it grants no fresh child or changed business operation and proves no completed
+ledger effect. Trading/payment enforcement belongs to their service consumers.
