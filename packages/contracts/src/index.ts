@@ -22,3 +22,4 @@ export * from './openapi-from-zod.js';
 export * from './action-approval.js';
 export * from './outreach-crm.js';
 export * from './account-controls.js';
+export * from './operation-identity-decisions.js';
