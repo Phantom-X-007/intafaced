@@ -254,6 +254,7 @@ export type AppRouter = typeof appRouter;
 
 const identityRequestContext = createIdentityRequestContext({
   privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+  edgeAuthoritySecret: env.IDENTITY_EDGE_AUTHORITY_SECRET,
   operationAdmissionSecrets: {
     'svc-trade': env.IDENTITY_TRADE_ADMISSION_SECRET,
     'svc-pay': env.IDENTITY_PAY_ADMISSION_SECRET,
@@ -291,6 +292,7 @@ app.get('/ready', async () => ({
   founderControls: founderControls.readiness(),
   operationAdmission: configuredIdentityOperationOwners({
     privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+    edgeAuthoritySecret: env.IDENTITY_EDGE_AUTHORITY_SECRET,
     secret: env.EDGE_PRINCIPAL_SECRET,
     serviceName: env.SERVICE_NAME,
     internalSecret: env.INTERNAL_SERVICE_SECRET,
@@ -376,6 +378,7 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
  */
 registerApiKeyOwnershipRoute(app, {
   privateAuthoritySecret: env.IDENTITY_WS_AUTHORITY_SECRET,
+  edgeAuthoritySecret: env.IDENTITY_EDGE_AUTHORITY_SECRET,
   operationAdmissionSecrets: { 'svc-trade': env.IDENTITY_TRADE_ADMISSION_SECRET, 'svc-pay': env.IDENTITY_PAY_ADMISSION_SECRET },
   door: placeDoor,
   internalSecret: env.INTERNAL_SERVICE_SECRET,

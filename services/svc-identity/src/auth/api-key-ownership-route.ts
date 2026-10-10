@@ -5,7 +5,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, SERVICE_HEADER, type ServiceBodyBindMode } from '@intafaced/contracts';
-import { identityWsAuthoritySecret } from '../controls/founder-context.js';
+import { identityAuthorityReadSecret } from '../controls/founder-context.js';
 import type { PlaceDoor } from './place-door.js';
 
 export const API_KEY_OWNERSHIP_PATH = '/internal/api-keys' as const;
@@ -16,6 +16,7 @@ export function registerApiKeyOwnershipRoute(
     door: Pick<PlaceDoor, 'getApiKeyOwnership'>;
     internalSecret: string;
     privateAuthoritySecret?: string;
+    edgeAuthoritySecret?: string;
     operationAdmissionSecrets?: Partial<Record<'svc-trade' | 'svc-pay', string>>;
     bodyBind?: ServiceBodyBindMode;
     /** Isolated tests need this. Production `index.ts` already installed via accrue. */
@@ -26,17 +27,18 @@ export function registerApiKeyOwnershipRoute(
     retainRawBody(app);
   }
   app.get<{ Params: { keyId: string } }>(`${API_KEY_OWNERSHIP_PATH}/:keyId`, async (req, reply) => {
-    const ws = req.headers[SERVICE_HEADER] === 'svc-ws';
-    const secret = ws ? identityWsAuthoritySecret(opts) : opts.internalSecret;
+    const reader = req.headers[SERVICE_HEADER];
+    const scoped = reader === 'svc-ws' || reader === 'svc-edge';
+    const secret = scoped ? identityAuthorityReadSecret(opts, reader) : opts.internalSecret;
     const hasBody =
       req.headers['transfer-encoding'] !== undefined ||
       (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0');
     if (
       !secret ||
-      (ws && hasBody) ||
+      (scoped && hasBody) ||
       verifyServiceHeaders(req.headers, secret, {
-        rawBody: ws ? { retained: true, bytes: Buffer.alloc(0) } : rawBodyOf(req),
-        mode: ws ? 'require' : opts.bodyBind,
+        rawBody: scoped ? { retained: true, bytes: Buffer.alloc(0) } : rawBodyOf(req),
+        mode: scoped ? 'require' : opts.bodyBind,
       }).service === null
     ) {
       return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });

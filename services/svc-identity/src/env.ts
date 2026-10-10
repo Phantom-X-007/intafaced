@@ -38,6 +38,8 @@ const schema = serviceEnvSchema
       IDENTITY_PAY_ADMISSION_SECRET: z.string().min(32).optional(),
       /** Dedicated private-stream read key; never the generic or owner admission key. */
       IDENTITY_WS_AUTHORITY_SECRET: z.string().min(32).optional(),
+      /** Dedicated HTTP perimeter read key, scoped to authority and key policy. */
+      IDENTITY_EDGE_AUTHORITY_SECRET: z.string().min(32).optional(),
       /**
        * Registration open? §11 gates this behind the drop sequence.
        * Blank / unset → unpublished; register refuses (`identity.registration_open_unset`).

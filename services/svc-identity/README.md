@@ -229,12 +229,15 @@ later than five seconds after the database check, or sooner with the credential.
 Consumers must enforce the returned expiry. This slice does not serialize
 trade/payment admission; bounded private-read leases belong to svc-ws.
 
-Configure `IDENTITY_WS_AUTHORITY_SECRET` separately from generic and admission
-keys. svc-ws supplies that key as `IDENTITY_OWNERSHIP_SECRET`. It authenticates
-only `accountControls.currentAuthority` and GET `/internal/api-keys/:keyId`;
-mixed batches, mutations and aliased keys refuse. No generic money credential
-is required by the public socket process. Other existing service readers keep
-their current authentication.
+Configure separate `IDENTITY_WS_AUTHORITY_SECRET` and
+`IDENTITY_EDGE_AUTHORITY_SECRET` keys, distinct from generic and admission keys
+and each other. Each public process supplies its own key as
+`IDENTITY_OWNERSHIP_SECRET`. Each authenticates only
+`accountControls.currentAuthority` and GET `/internal/api-keys/:keyId`;
+mixed batches, mutations and aliased keys refuse. Neither public process needs a
+generic money credential. Other existing service readers keep their current
+authentication. `/ready.operationAdmission` reports these read-key configuration
+flags separately from the owner admission keys; configuration is not a live probe.
 
 Apply `drizzle/0026_operation_identity_decisions.sql` for owner operation decisions.
 Set independent `IDENTITY_TRADE_ADMISSION_SECRET` and

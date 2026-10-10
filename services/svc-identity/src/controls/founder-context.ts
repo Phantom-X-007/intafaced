@@ -10,24 +10,37 @@ import {
 type IdentityContextOptions = EdgeContextOptions & {
   operationAdmissionSecrets?: Partial<Record<'svc-trade' | 'svc-pay', string>>;
   privateAuthoritySecret?: string;
+  edgeAuthoritySecret?: string;
 };
 
-export function identityWsAuthoritySecret(
-  options: Pick<IdentityContextOptions, 'internalSecret' | 'operationAdmissionSecrets' | 'privateAuthoritySecret'>,
-): string | null {
-  const secret = options.privateAuthoritySecret;
+type ReadSecretOptions = Pick<
+  IdentityContextOptions,
+  'internalSecret' | 'operationAdmissionSecrets' | 'privateAuthoritySecret' | 'edgeAuthoritySecret'
+>;
+export function identityAuthorityReadSecret(options: ReadSecretOptions, reader: 'svc-ws' | 'svc-edge'): string | null {
+  const secret = reader === 'svc-ws' ? options.privateAuthoritySecret : options.edgeAuthoritySecret;
+  const other = reader === 'svc-ws' ? options.edgeAuthoritySecret : options.privateAuthoritySecret;
   return secret &&
     secret.length >= 32 &&
     secret !== options.internalSecret &&
+    secret !== other &&
     !Object.values(options.operationAdmissionSecrets ?? {}).includes(secret)
     ? secret
     : null;
+}
+export function identityWsAuthoritySecret(options: ReadSecretOptions): string | null {
+  return identityAuthorityReadSecret(options, 'svc-ws');
 }
 
 function ownerSecret(options: IdentityContextOptions, owner: 'svc-trade' | 'svc-pay'): string | null {
   const secret = options.operationAdmissionSecrets?.[owner];
   const other = options.operationAdmissionSecrets?.[owner === 'svc-trade' ? 'svc-pay' : 'svc-trade'];
-  return secret && secret.length >= 32 && secret !== options.internalSecret && secret !== other && secret !== options.privateAuthoritySecret
+  return secret &&
+    secret.length >= 32 &&
+    secret !== options.internalSecret &&
+    secret !== other &&
+    secret !== options.privateAuthoritySecret &&
+    secret !== options.edgeAuthoritySecret
     ? secret
     : null;
 }
@@ -38,6 +51,7 @@ export function configuredIdentityOperationOwners(options: IdentityContextOption
     tradeKeyConfigured: ownerSecret(options, 'svc-trade') !== null,
     payKeyConfigured: ownerSecret(options, 'svc-pay') !== null,
     wsAuthorityKeyConfigured: identityWsAuthoritySecret(options) !== null,
+    edgeAuthorityKeyConfigured: identityAuthorityReadSecret(options, 'svc-edge') !== null,
   };
 }
 
@@ -56,9 +70,10 @@ export function createIdentityRequestContext(options: IdentityContextOptions) {
     } catch {
       return { ...context, service: null };
     }
-    if (req.headers[SERVICE_HEADER] === 'svc-ws' && procedures.includes('accountControls.currentAuthority')) {
+    const reader = req.headers[SERVICE_HEADER];
+    if ((reader === 'svc-ws' || reader === 'svc-edge') && procedures.includes('accountControls.currentAuthority')) {
       if (procedures.some((name) => name !== 'accountControls.currentAuthority')) return { ...context, service: null };
-      const secret = identityWsAuthoritySecret(options);
+      const secret = identityAuthorityReadSecret(options, reader);
       const rawBody = typeof req.body === 'string' ? { retained: true as const, bytes: Buffer.from(req.body, 'utf8') } : rawBodyOf(req);
       return { ...context, service: secret ? verifyServiceHeaders(req.headers, secret, { mode: 'require', rawBody }).service : null };
     }
