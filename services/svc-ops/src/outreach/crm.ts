@@ -1016,6 +1016,82 @@ export class OutreachCrm {
       return workflow.crmInteractionReceiptSchema.parse({ interaction, activity, opportunity });
     });
   }
+  async queueMessage(raw: z.infer<typeof workflow.crmQueueMessageInputSchema>, actor: string) {
+    const input = normalizeIds(workflow.crmQueueMessageInputSchema.parse(raw));
+    return this.mutate(actor, input, 'queueMessage', async (tx, old) => {
+      if (old.revision !== input.expectedRevision) throw new OutreachError('ops.crm.revision_conflict');
+      if (old.stage === 'closed') throw new OutreachError('ops.crm.opportunity_closed');
+      if (input.kind === 'call_invitation') await this.reviewedInvestor(tx, old);
+      const rows = await tx`SELECT record FROM ops.crm_submissions WHERE id=${old.submissionId}`;
+      const original = crmSubmissionSchema.parse(rows[0]?.record),
+        id = randomUUID();
+      const activity = await this.activity(
+        tx,
+        old.id,
+        { kind: 'operator', userId: actor.toLowerCase() },
+        'email_status',
+        `Message queued: ${input.kind}`,
+        id,
+      );
+      const wire = workflow.guestNotificationSendInputSchema.parse({
+        businessKey: `staff_message:${id}`,
+        contactId: original.contactId,
+        submissionId: original.submissionId,
+        recipientEmail: original.contact.email,
+        message: { kind: input.kind, activityId: activity.id, staffText: input.staffText },
+      });
+      const at = this.now().toISOString();
+      await tx`INSERT INTO ops.crm_outbox(id,business_key,submission_id,kind,status,payload,created_at,updated_at,
+        error_code,dispatch_payload,opportunity_id,actor_user_id)
+        VALUES (${id},${wire.businessKey},${original.submissionId},${input.kind},'unconfigured',${tx.json({ activityId: activity.id })},
+        ${at},${at},'ops.crm.notification_unconfigured',${tx.json(wire)},${old.id},${actor.toLowerCase()})`;
+      const opportunity = await this.saveOpportunity(tx, { ...old, revision: old.revision + 1, updatedAt: at });
+      const message = workflow.crmMessageSchema.parse({
+        id,
+        opportunityId: old.id,
+        submissionId: original.submissionId,
+        kind: input.kind,
+        actorUserId: actor.toLowerCase(),
+        status: 'unconfigured',
+        createdAt: at,
+        notification: null,
+      });
+      await this.audit(tx, actor, input.requestId, 'opportunity', old.id, 'message_queued', input.reason, {
+        messageId: id,
+        kind: input.kind,
+        activityId: activity.id,
+        recipientSource: 'original_submission',
+      });
+      return workflow.crmQueueMessageReceiptSchema.parse({ opportunity, activity, message });
+    });
+  }
+  async listMessages(raw: z.infer<typeof workflow.crmMessageListInputSchema>) {
+    const input = normalizeIds(workflow.crmMessageListInputSchema.parse(raw));
+    const scope = `messages:${input.opportunityId}`,
+      cursor = this.pageCursor(input.cursor, scope);
+    return this.write(async (tx) => {
+      const rows = await tx`SELECT * FROM ops.crm_outbox WHERE opportunity_id=${input.opportunityId}
+        AND (${cursor?.at ?? null}::timestamptz IS NULL OR (created_at,id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid))
+        ORDER BY created_at DESC,id DESC LIMIT ${input.limit + 1}`;
+      const items = rows.slice(0, input.limit).map((row) =>
+        workflow.crmMessageSchema.parse({
+          id: row.id,
+          opportunityId: row.opportunity_id,
+          submissionId: row.submission_id,
+          kind: row.kind,
+          actorUserId: row.actor_user_id,
+          status: row.status,
+          createdAt: new Date(row.created_at).toISOString(),
+          notification: row.notification_receipt,
+        }),
+      );
+      const last = items.at(-1);
+      return workflow.crmMessagePageSchema.parse({
+        items,
+        nextCursor: rows.length > input.limit && last ? this.nextCursor(last.createdAt, last.id, scope) : null,
+      });
+    }, 'repeatable read');
+  }
 
   private async saveOpportunity(tx: Sql, raw: unknown): Promise<CrmOpportunity> {
     const row = crmOpportunitySchema.parse(raw);

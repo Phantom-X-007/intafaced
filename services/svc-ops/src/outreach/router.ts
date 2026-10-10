@@ -161,6 +161,14 @@ export function createOutreachRouter(crm: OutreachCrm, authority: FounderAuthori
       .input(workflow.crmInteractionInputSchema)
       .output(workflow.crmInteractionReceiptSchema)
       .mutation(({ input, ctx }) => mapped(() => crm.recordInteraction(input, ctx.principal!.userId))),
+    queueMessage: staffWrite
+      .input(workflow.crmQueueMessageInputSchema)
+      .output(workflow.crmQueueMessageReceiptSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.queueMessage(input, ctx.principal!.userId))),
+    listMessages: staffRead
+      .input(workflow.crmMessageListInputSchema)
+      .output(workflow.crmMessagePageSchema)
+      .query(({ input }) => mapped(() => crm.listMessages(input))),
     listWorkflowAudit: staffRead
       .input(workflow.crmWorkflowAuditListInputSchema)
       .output(workflow.crmWorkflowAuditPageSchema)

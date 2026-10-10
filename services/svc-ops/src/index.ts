@@ -5,6 +5,8 @@ import { migrateOutreach } from './db/migrate.js';
 import { OutreachCrm } from './outreach/crm.js';
 import { createFounderAuthority } from './outreach/authority.js';
 import { createClientIpResolver } from './outreach/client-ip.js';
+import { createOutreachNotificationClient } from './outreach/notification-client.js';
+import { OutreachNotificationWorker } from './outreach/notification-worker.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -63,6 +65,8 @@ try {
   /* Invalid configuration refuses intake. */
 }
 const crm = new OutreachCrm(crmSql, outreachConfiguration);
+const notificationPort = createOutreachNotificationClient({ notifyUrl: env.NOTIFY_URL, secret: env.OPS_NOTIFY_SERVICE_SECRET });
+const notificationWorker = crmSql ? new OutreachNotificationWorker(crmSql, notificationPort) : null;
 const appRouter = createOpsRouter(ops, {
   crm,
   authority: createFounderAuthority({
@@ -81,7 +85,11 @@ app.get('/ready', async () => ({
   ready: true,
   // Env URL is configured, not a live probe. Sources stay hardcoded-absent. This process does not fetch.
   ...opsReadyUrlHonesty(env),
-  outreach: { storage: crmSql ? 'configured' : 'unavailable', engagement: { status: 'disabled', reason: 'api_access_unavailable' } },
+  outreach: {
+    storage: crmSql ? 'configured' : 'unavailable',
+    notifications: { ingress: notificationPort.configured ? 'configured' : 'unconfigured', gateway: 'unverified' },
+    engagement: { status: 'disabled', reason: 'api_access_unavailable' },
+  },
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -100,10 +108,27 @@ await app.register(fastifyTRPCPlugin, {
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-ops ready');
 
+let notificationRun: Promise<void> | null = null;
+const notificationTimer = setInterval(() => {
+  if (!notificationWorker || notificationRun) return;
+  notificationRun = (async () => {
+    for (let count = 0; count < 5; count++) if (!(await notificationWorker.runOnce())) break;
+  })()
+    .catch(() => {
+      app.log.warn({ code: 'ops.crm.notification_worker_unavailable' }, 'Outreach queue remains pending');
+    })
+    .finally(() => {
+      notificationRun = null;
+    });
+}, 1000);
+notificationTimer.unref();
+
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      clearInterval(notificationTimer);
       await app.close();
+      await notificationRun;
       await crmSql?.end({ timeout: 5 });
       process.exit(0);
     })();
