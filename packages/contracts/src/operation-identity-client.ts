@@ -6,7 +6,17 @@ import {
   type IdentityOperationDecisionPort,
 } from './operation-identity-decisions.js';
 
-const uuidFields = new Set(['userId', 'merchantId', 'sessionId', 'apiKeyId', 'subAccountId', 'parentGrantId']);
+const uuidFields = new Set([
+  'userId',
+  'merchantId',
+  'sessionId',
+  'apiKeyId',
+  'subAccountId',
+  'parentGrantId',
+  'actorMerchantId',
+  'subjectMerchantId',
+  'grantEventId',
+]);
 export function normalizeIdentityOperationInput(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeIdentityOperationInput);
   if (value && typeof value === 'object')
