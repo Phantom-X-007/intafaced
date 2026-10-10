@@ -22,7 +22,7 @@ export class OperationIdentityDecisions {
 
   private async credential(tx: Sql, intent: IdentityOperationIntent): Promise<CredentialCheck> {
     let subject: CurrentAuthorityInput | null = null;
-    if (intent.authority.kind === 'credential') subject = intent.authority.subject;
+    if (intent.authority.kind === 'credential' || intent.authority.kind === 'payfac_credential') subject = intent.authority.subject;
     else if (intent.authority.kind === 'delegation') {
       const [row] = await tx<Array<{ decision: unknown }>>`
         SELECT decision FROM operation_identity_decisions WHERE grant_id = ${intent.authority.parentGrantId}
@@ -40,7 +40,16 @@ export class OperationIdentityDecisions {
       }
       subject = parent.data.intent.authority.subject;
     }
-    if (subject === null) return { subject, expiresAt: null, refusal: null };
+    if (subject === null)
+      return { subject, expiresAt: null, refusal: intent.authority.kind === 'merchant_policy' ? null : 'auth.credential_denied' };
+    if (subject.userId !== intent.operation.userId) {
+      // PayFac evidence is vouched for by svc-pay. Identity still checks the
+      // original parent's live identity and credential, alongside the child.
+      const [actor] = await tx<Array<{ status: string }>>`
+        SELECT status FROM users WHERE id = ${subject.userId} FOR SHARE
+      `;
+      if (!actor || actor.status !== 'active') return { subject, expiresAt: null, refusal: 'auth.account_frozen' };
+    }
     const ref = subject.credential;
     const [row] =
       ref.kind === 'session'
@@ -50,15 +59,14 @@ export class OperationIdentityDecisions {
         : await tx<Array<{ user_id: string; revoked: boolean; expires_at: Date | null; account_id: string | null }>>`
           SELECT user_id, revoked, expires_at, account_id FROM api_keys WHERE id = ${ref.apiKeyId} FOR SHARE
         `;
-    if (!row || row.user_id !== intent.operation.userId || row.revoked)
-      return { subject, expiresAt: null, refusal: 'auth.credential_denied' };
+    if (!row || row.user_id !== subject.userId || row.revoked) return { subject, expiresAt: null, refusal: 'auth.credential_denied' };
     if ('account_id' in row && row.account_id !== null && row.account_id !== subject.subAccountId)
       return { subject, expiresAt: row.expires_at, refusal: 'auth.sub_account_denied' };
     if (subject.subAccountId) {
       const [sub] = await tx<Array<{ parent_user_id: string; revoked: boolean }>>`
         SELECT parent_user_id, revoked FROM sub_accounts WHERE id = ${subject.subAccountId} FOR SHARE
       `;
-      if (!sub || sub.parent_user_id !== intent.operation.userId || sub.revoked)
+      if (!sub || sub.parent_user_id !== subject.userId || sub.revoked)
         return { subject, expiresAt: row.expires_at, refusal: 'auth.sub_account_denied' };
     }
     return { subject, expiresAt: row.expires_at, refusal: null };

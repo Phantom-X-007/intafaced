@@ -223,6 +223,76 @@ describe.runIf(Boolean(url))('durable identity operation decisions', () => {
     });
   });
 
+  function payfacIntent(actor: Context, explicit = false): IdentityOperationIntent {
+    const actorMerchantId = randomUUID(),
+      subjectMerchantId = randomUUID();
+    return {
+      businessId: randomUUID(),
+      payloadHash: 'sha256:' + 'a'.repeat(64),
+      operation: { service: 'svc-pay', kind: 'payment.create', userId: target.principal!.userId, merchantId: subjectMerchantId },
+      authority: {
+        kind: 'payfac_credential',
+        subject: { userId: actor.principal!.userId, credential: { kind: 'session', sessionId: actor.principal!.sid } },
+        area: 'payment',
+        proof: explicit
+          ? { kind: 'explicit_grant', actorMerchantId, subjectMerchantId, grantEventId: randomUUID(), grantSequence: '7' }
+          : { kind: 'root_relation', actorMerchantId, subjectMerchantId },
+      },
+    };
+  }
+
+  it.each([false, true])('checks the original PayFac actor as well as the child owner (explicit grant: %s)', async (explicit) => {
+    const actor = await seed();
+    const input = payfacIntent(actor, explicit);
+    const admitted = await decisions.decide(grant(input), 'svc-pay');
+    expect(admitted).toMatchObject({ status: 'granted', intent: input });
+    await controls.change(founder, {
+      requestId: randomUUID(),
+      target: { area: 'identity', userId: actor.principal!.userId },
+      action: 'restrict',
+      reason: 'Synthetic PayFac actor cutoff',
+      expectedVersion: '0',
+    });
+    expect(await decisions.decide(grant({ ...input, businessId: randomUUID() }), 'svc-pay')).toMatchObject({
+      status: 'cancelled',
+      code: 'auth.account_frozen',
+    });
+    expect(await decisions.decide(cancel(input), 'svc-pay')).toEqual(admitted);
+    const otherActor = await seed();
+    await change('restrict', '0');
+    expect(await decisions.decide(grant(payfacIntent(otherActor, explicit)), 'svc-pay')).toMatchObject({
+      status: 'cancelled',
+      code: 'auth.account_frozen',
+    });
+  });
+
+  it('checks actual PayFac credential ownership, expiry and revocation instead of trusting its assertion', async () => {
+    const actor = await seed();
+    const input = payfacIntent(actor);
+    if (input.authority.kind !== 'payfac_credential') throw new Error();
+    const foreign = {
+      ...input,
+      authority: {
+        ...input.authority,
+        subject: {
+          ...input.authority.subject,
+          credential: { kind: 'session' as const, sessionId: target.principal!.sid },
+        },
+      },
+    };
+    expect(await decisions.decide(grant(foreign), 'svc-pay')).toMatchObject({ status: 'cancelled', code: 'auth.credential_denied' });
+    await db.sql`UPDATE sessions SET expires_at=now()-interval '1 second' WHERE id=${actor.principal!.sid}`;
+    expect(await decisions.decide(grant({ ...input, businessId: randomUUID() }), 'svc-pay')).toMatchObject({
+      status: 'cancelled',
+      code: 'auth.credential_denied',
+    });
+    await db.sql`UPDATE sessions SET expires_at=now()+interval '1 day',revoked=true WHERE id=${actor.principal!.sid}`;
+    expect(await decisions.decide(grant({ ...input, businessId: randomUUID() }), 'svc-pay')).toMatchObject({
+      status: 'cancelled',
+      code: 'auth.credential_denied',
+    });
+  });
+
   it('concurrent grant/cancellation resolves one immutable outcome, never a later upgrade', async () => {
     for (let n = 0; n < 8; n++) {
       const input = intent();

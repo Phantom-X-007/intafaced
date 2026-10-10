@@ -253,7 +253,12 @@ current active identity and actual credential ownership, revocation, expiry and
 subaccount under the same guard as identity restrictions. Account-bound API keys
 require the matching actual subaccount. Delegated children
 recheck the original strategy credential. Merchant policy authority is vouched
-for by svc-pay and still checks the actual active identity.
+for by svc-pay and still checks the actual active identity. PayFac authority
+preserves svc-pay's explicit grant or root relationship and the original parent
+credential. Identity checks both the child owner's active identity and the
+parent's active identity, actual credential ownership, expiry and subaccount.
+Resolving an existing grant recovers only its original payload after either
+identity is restricted; it never grants a fresh delegated operation.
 
 Every decision is immutable. `resolve_or_cancel` returns the prior decision or
 records a cancellation tombstone that prevents a delayed first grant. The owning
