@@ -25,5 +25,6 @@ export * from './account-controls.js';
 export * from './operation-identity-decisions.js';
 export * from './operation-identity-client.js';
 export * from './crm-workflows.js';
+export * from './crm-notifications.js';
 export * from './outreach-interests.js';
 export * from './guest-notifications.js';
