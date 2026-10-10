@@ -30,6 +30,9 @@ const schema = serviceEnvSchema
     z.object({
       SERVICE_NAME: z.string().default('svc-identity'),
       HTTP_PORT: z.coerce.number().int().default(4002),
+      /** Existing verified platform UUIDs. Missing/malformed/duplicate pair disables controls. */
+      IDENTITY_FOUNDER_NITRO_USER_ID: z.string().optional(),
+      IDENTITY_FOUNDER_PHANTOM_USER_ID: z.string().optional(),
       /**
        * Registration open? §11 gates this behind the drop sequence.
        * Blank / unset → unpublished; register refuses (`identity.registration_open_unset`).

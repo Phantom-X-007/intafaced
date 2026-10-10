@@ -249,11 +249,15 @@ if (!available) {
       });
       await expect(store.readSession(session.sessionId)).resolves.toMatchObject({ status: 'open' });
       await auth.logout(session.refreshToken);
-      await store.publishSession({
-        sessionId: session.sessionId,
-        userId: session.userId,
-        status: 'open',
-      });
+      await expect(
+        store.publishSession({
+          sessionId: session.sessionId,
+          userId: session.userId,
+          status: 'open',
+        }),
+      ).rejects.toMatchObject({ code: 'session_authority_denied' });
+      // Inject a legacy stale projection; the production publisher refuses it.
+      await db.sql`UPDATE navigator_session_projections SET status = 'open' WHERE session_id = ${session.sessionId}`;
       await expect(store.readSession(session.sessionId)).resolves.toMatchObject({
         sessionId: session.sessionId,
         userId: session.userId,
