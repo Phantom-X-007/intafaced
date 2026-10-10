@@ -172,7 +172,7 @@
 
         <template v-else>
           <div class="selected-interest-summary saved-summary">
-            <span><span class="saved-dot" aria-hidden="true">✓</span> Your details are saved. Continue with a few questions.</span
+            <span><span class="saved-dot" aria-hidden="true">✓</span> {{ savedStageMessage }}</span
             ><button type="button" class="outreach-text-button" :disabled="busy" @click="openAddInterests">Add an interest</button>
           </div>
           <details class="saved-contact-details">
@@ -470,6 +470,7 @@
 <script>
 import { mutate } from '../../config/intafaced.js';
 let intake = require('../../assets/js/outreach-intake.js');
+let formatReviewAmount = require('../../assets/js/outreach-review.js').formatReviewAmount;
 let publicInfo = require('../../assets/js/outreach-public-info.js').publicInfo;
 let createDraftStorage = require('../../assets/js/outreach-draft-storage.js').createDraftStorage;
 let countries = require('../../assets/js/outreach-countries.js').countryOptions('en');
@@ -598,6 +599,11 @@ export default {
     complete() {
       return this.draft && !!this.draft.completedAt && this.savedCount === this.draft.contact.interests.length;
     },
+    savedStageMessage() {
+      if (this.complete) return 'Your details and answers are saved.';
+      if (this.group === 2) return 'Your details are saved. Review your answers before sending your enquiry.';
+      return 'Your details are saved. Continue with a few questions.';
+    },
     groupLabels() {
       return ['About you', 'Context', 'Review'];
     },
@@ -649,12 +655,12 @@ export default {
       let rows = this.fields.map((f) => ({ label: f.label, value: this.reviewValue(f, this.answers[f.key]) }));
       if (this.currentAudience === 'investor' || this.currentAudience === 'merchant')
         rows.push({
-          label: this.currentAudience === 'investor' ? 'Indicative contribution' : 'Processing volume',
+          label: this.currentAudience === 'investor' ? 'Amount you’re considering' : 'Processing volume',
           value:
             this.currentAudience === 'investor' && this.answers.participation === 'introduction'
               ? 'Not requested for an introduction'
               : this.answers.amountStatus === 'stated'
-                ? this.answers.amount +
+                ? formatReviewAmount(this.answers.amount) +
                   ' ' +
                   this.answers.currency +
                   (this.currentAudience === 'merchant' ? ' · ' + this.answers.period : '')
