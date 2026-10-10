@@ -50,7 +50,7 @@ function parsedStatus(value: unknown): Status {
       ? !isTime(value.completedAt) || value.pendingSubmissionCount !== 0 || value.code !== null
       : value.status !== 'pending_notify' || value.completedAt !== null)
   )
-    throw new Error('The erasure receipt could not be confirmed. Retry this same request.');
+    throw new Error('The deletion result could not be confirmed. Retry this same request.');
   return value as Status;
 }
 function parsedPreview(value: unknown): Preview {
@@ -75,7 +75,7 @@ function parsedPreview(value: unknown): Preview {
     !exact(value.counts, ['contacts', 'submissions', 'opportunities', 'tasks', 'messages']) ||
     Object.values(value.counts).some((v) => !isCount(v))
   )
-    throw new Error('The reviewed contact cluster could not be confirmed. Load another preview.');
+    throw new Error('The linked contact records could not be confirmed. Load another preview.');
   return value as Preview;
 }
 export type PendingPrivacyWrite = { inputKey: string; body: string };
@@ -121,7 +121,7 @@ export async function privacyWrite(
     }
     if (response.status === 401 || response.status === 403)
       throw new Error('Your founder session is unavailable. Sign in again before retrying this request.');
-    throw new Error('The erasure receipt is unconfirmed. Keep this enquiry open and retry the same request.');
+    throw new Error('The deletion result is unconfirmed. Keep this enquiry open and retry the same request.');
   }
   const raw: unknown = await response.json();
   const result = parsedStatus(raw);
@@ -129,16 +129,16 @@ export async function privacyWrite(
     result.canonicalContactId !== canonicalContactId ||
     ('intentId' in input && (result.intentId !== input.intentId || result.revision < input.expectedRevision))
   )
-    throw new Error('The erasure receipt could not be confirmed. Retry this same request.');
+    throw new Error('The deletion result could not be confirmed. Retry this same request.');
   pending.delete(action);
   return result;
 }
 const pendingText: Record<NonNullable<Status['code']>, string> = {
-  'ops.crm.notification_unconfigured': 'The notification connection is unavailable. Prospect records remain while erasure is pending.',
+  'ops.crm.notification_unconfigured': 'The email service is unavailable. Contact records remain while deletion is pending.',
   'ops.crm.notification_erasure_unknown':
-    'Notification erasure is unconfirmed. Prospect records remain. Retry this bounded step to recover its receipt.',
+    'Deletion of saved email records is unconfirmed. Contact records remain. Retry this step to check the result.',
   'ops.crm.notification_in_flight':
-    'A notification operation is still in progress. Prospect records remain. Check status before trying this step again.',
+    'An email operation is still in progress. Contact records remain. Check deletion progress before trying this step again.',
 };
 function statusUrl(intentId: string, canonicalContactId: string) {
   return `/api/crm/privacy?${new URLSearchParams({ view: 'privacyStatus', intentId, canonicalContactId })}`;
@@ -197,7 +197,7 @@ export function CrmPrivacy({
       try {
         await onComplete();
       } catch {
-        if (mounted.current) setError('Erasure is complete. Refresh the workspace to remove its earlier view.');
+        if (mounted.current) setError('Deletion is complete. Refresh the workspace to remove its earlier view.');
       }
     }
   }
@@ -251,7 +251,7 @@ export function CrmPrivacy({
         setError(
           failure instanceof Error
             ? failure.message
-            : 'The start receipt is unconfirmed. Keep this enquiry open and retry the same request.',
+            : 'Starting deletion is unconfirmed. Keep this enquiry open and retry the same request.',
         );
     } finally {
       if (mounted.current) setBusy(false);
@@ -289,13 +289,13 @@ export function CrmPrivacy({
         result.requestedAt !== intent.requestedAt ||
         result.revision < intent.revision
       )
-        throw new Error('The current erasure status could not be confirmed.');
+        throw new Error('The current deletion progress could not be confirmed.');
       await received(result);
       setNeedsStatus(false);
       // Preserve an unknown command's original revision/UUID until its exact retry is confirmed.
       if (!pending.current.has('privacyAdvance')) advance.current = null;
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Erasure status unavailable.');
+      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Deletion progress unavailable.');
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -310,52 +310,53 @@ export function CrmPrivacy({
           `/api/crm/privacy?${new URLSearchParams({ view: 'privacyStatus', canonicalContactId: canonicalContact.id })}`,
         ),
       );
-      if (result.canonicalContactId !== canonicalContact.id) throw new Error('The existing erasure does not match this canonical contact.');
+      if (result.canonicalContactId !== canonicalContact.id) throw new Error('The deletion request does not match this primary contact.');
       // A canonical lookup recovers durable state without issuing or changing a command.
       // Keep any unknown mounted command's exact payload and UUID for its original retry.
       await received(result);
       setNeedsStatus(false);
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Existing erasure unavailable.');
+      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Deletion progress unavailable.');
     } finally {
       if (mounted.current) setBusy(false);
     }
   }
-  let retentionLabel = 'Retention status unavailable. No automatic erasure is confirmed.';
+  let retentionLabel = 'Retention status unavailable. Automatic deletion has not been confirmed.';
   if (retention === 'disabled') retentionLabel = 'Automatic retention disabled · published outreach policy not configured.';
   else if (retention === 'loading') retentionLabel = 'Checking retention status…';
-  let startLabel = 'Start entire-cluster erasure';
+  let startLabel = 'Start contact deletion';
   if (busy) startLabel = 'Confirming…';
-  else if (pending.current.has('privacyBegin')) startLabel = 'Retry starting erasure';
-  let advanceLabel = 'Advance one erasure step';
+  else if (pending.current.has('privacyBegin')) startLabel = 'Retry starting deletion';
+  let advanceLabel = 'Continue deletion';
   if (busy) advanceLabel = 'Confirming…';
-  else if (pending.current.has('privacyAdvance')) advanceLabel = 'Retry same erasure step';
+  else if (pending.current.has('privacyAdvance')) advanceLabel = 'Retry the same deletion step';
   return (
     <section className="adm-enquiry-workflows" aria-label="Contact privacy">
       <h3>Contact privacy</h3>
       <p className="adm-subtle">{retentionLabel}</p>
       <details>
-        <summary>Review whole-cluster erasure</summary>
+        <summary>Review contact deletion</summary>
         <p>
-          Canonical contact: <strong>{canonicalContact.name}</strong> · {canonicalContact.email}
+          Primary contact: <strong>{canonicalContact.name}</strong> · {canonicalContact.email}
         </p>
         <p className="adm-subtle">
-          Verify the privacy request before proceeding. Erasure covers this canonical contact, every merged alias and all their original
-          enquiries.
+          Verify the privacy request before proceeding. Deletion covers this primary contact, every merged contact and all their linked
+          enquiry records.
         </p>
         <p className="adm-subtle">
-          A saved intent is not completed erasure. Receipts here do not verify deletion at an external email provider.
+          A saved deletion request does not mean deletion is complete. This removes our saved records; it cannot recall email already
+          accepted by an external provider.
         </p>
         {error && (
           <p className="adm-alert" role="alert">
             {error}
-            {pending.current.size > 0 ? ' The last receipt is unconfirmed. Keep this enquiry open and use its retry action.' : ''}
+            {pending.current.size > 0 ? ' The last result is unconfirmed. Keep this enquiry open and use its retry action.' : ''}
           </p>
         )}
         {!intent && (
           <>
             <p className="adm-subtle">
-              Either founder can recover an existing erasure for this contact after reloading. Checking does not start or advance erasure.
+              Either founder can check this contact's deletion progress after reloading. Checking does not start or continue deletion.
             </p>
             <button
               type="button"
@@ -364,7 +365,7 @@ export function CrmPrivacy({
                 void checkExisting();
               }}
             >
-              Check existing erasure for this contact
+              Check deletion progress
             </button>
             <button
               type="button"
@@ -373,7 +374,7 @@ export function CrmPrivacy({
                 void inspect();
               }}
             >
-              Preview contact cluster
+              Preview linked records
             </button>
             {preview && (
               <div className="adm-form">
@@ -394,10 +395,10 @@ export function CrmPrivacy({
                   ))}
                 </dl>
                 <div className="adm-callout" data-tone="danger">
-                  <strong>Destructive action · entire contact cluster</strong>
+                  <strong>Destructive action · all linked contact records</strong>
                   <p>
-                    Saved contact details, original answers, notes and linked outreach records will be removed after notification erasure is
-                    confirmed. This cannot be undone here.
+                    Saved contact details, original answers, notes and linked enquiry records will be removed after deletion of their saved
+                    email records is confirmed. This cannot be undone here.
                   </p>
                 </div>
                 <label className="adm-check">
@@ -407,12 +408,12 @@ export function CrmPrivacy({
                     disabled={busy || pending.current.has('privacyBegin')}
                     onChange={(event) => setConfirmed(event.target.checked)}
                   />
-                  I verified this request and confirm erasure of all {preview.counts.contacts} contacts and {preview.counts.submissions}{' '}
+                  I verified this request and confirm deletion of all {preview.counts.contacts} contacts and {preview.counts.submissions}{' '}
                   original enquiries shown above.
                 </label>
                 <p className="adm-subtle">
-                  Starting pauses this cluster's continuation, other enquiry changes and new message dispatch. Email already accepted and
-                  exports downloaded elsewhere cannot be recalled.
+                  Starting pauses edits, questionnaire access and new messages for these records. Email already accepted and exports
+                  downloaded elsewhere cannot be recalled.
                 </p>
                 <button
                   type="button"
@@ -432,28 +433,30 @@ export function CrmPrivacy({
         {intent && (
           <>
             <details>
-              <summary>Saved erasure reference</summary>
+              <summary>Deletion reference</summary>
               <p>
                 <code>{intent.intentId}</code>
               </p>
               <p className="adm-subtle">
-                Internal reference for this contact. Either founder can recover its erasure by selecting the contact and checking its
-                existing erasure. Founder authentication is required.
+                Internal reference for this contact. Either founder can select the contact and check deletion progress after signing in.
               </p>
             </details>
             <p className="adm-save-notice" role="status">
-              <strong>{intent.status === 'complete' ? 'Contact cluster erased' : 'Erasure pending'}</strong> · started by{' '}
+              <strong>{intent.status === 'complete' ? 'Linked contact records deleted' : 'Deletion pending'}</strong> · started by{' '}
               {founderName(owners, intent.requestedBy)} on {crmDate(intent.requestedAt)}.
             </p>
             {intent.status === 'pending_notify' ? (
               <>
-                <p>Original enquiries awaiting notification erasure: {intent.pendingSubmissionCount}.</p>
+                <p>Enquiries awaiting email-record deletion: {intent.pendingSubmissionCount}.</p>
                 <p className="adm-subtle">
                   {intent.code
                     ? pendingText[intent.code]
-                    : 'The intent is saved. Prospect records remain until every notification erasure is confirmed.'}
+                    : 'The deletion request is saved. Contact records remain until every enquiry’s saved email records are confirmed deleted.'}
                 </p>
-                <p className="adm-subtle">This cluster is paused. Each action below advances one bounded step; it sends no email.</p>
+                <p className="adm-subtle">
+                  Edits and new messages are paused. Continue deletion processes at most one enquiry per step; checking progress makes no
+                  changes. Neither action sends email.
+                </p>
                 <div className="adm-actions">
                   <button
                     type="button"
@@ -462,7 +465,7 @@ export function CrmPrivacy({
                       void refresh();
                     }}
                   >
-                    Check erasure status
+                    Check deletion progress
                   </button>
                   <button
                     type="button"
@@ -479,7 +482,7 @@ export function CrmPrivacy({
               </>
             ) : (
               <p className="adm-subtle">
-                Outreach erasure completed {intent.completedAt ? crmDate(intent.completedAt) : ''}. Previously accepted email and
+                Contact deletion completed {intent.completedAt ? crmDate(intent.completedAt) : ''}. Previously accepted email and
                 independently downloaded exports remain separate.
               </p>
             )}

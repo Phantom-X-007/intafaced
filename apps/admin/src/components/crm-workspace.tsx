@@ -653,7 +653,7 @@ export function CrmWorkspace({ csrf }: { csrf: string }) {
                     onComplete={async () => {
                       const erasedContactId = detail.provenance.canonicalContact.id;
                       setDetail((current) => (current?.provenance.canonicalContact.id === erasedContactId ? null : current));
-                      setNotice('Contact cluster erased from outreach records.');
+                      setNotice('Linked contact records deleted from outreach.');
                       await load();
                       setWorkflowVersion((value) => value + 1);
                     }}
