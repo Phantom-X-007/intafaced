@@ -102,7 +102,20 @@ export function openFounderSession(cookieHeader: string | null, config: AdminSes
 }
 
 export function assertAdminOrigin(request: Request, config: AdminSessionConfig, mutation: boolean): void {
-  if (new URL(request.url).origin !== config.origin || request.headers.get('sec-fetch-site') === 'cross-site') {
+  const expected = new URL(config.origin);
+  const requestUrl = new URL(request.url);
+  const host = request.headers.get('host');
+  const forwardedProtocol = request.headers.get('x-forwarded-proto');
+  const expectedProtocol = expected.protocol.slice(0, -1);
+  // Next may use its internal listener in request.url. Only a trusted ingress
+  // that preserves Host and overwrites this single-value header may supply TLS.
+  const invalidProtocol = forwardedProtocol !== null && forwardedProtocol !== expectedProtocol;
+  let authorityMatches = requestUrl.origin === config.origin;
+  if (host !== null) {
+    const protocol = forwardedProtocol ?? requestUrl.protocol.slice(0, -1);
+    authorityMatches = host.toLowerCase() === expected.host && protocol === expectedProtocol;
+  }
+  if (!authorityMatches || invalidProtocol || request.headers.get('sec-fetch-site') === 'cross-site') {
     throw new AdminSessionError('admin.session_origin', 403);
   }
   if (mutation && request.headers.get('origin') !== config.origin) throw new AdminSessionError('admin.session_origin', 403);

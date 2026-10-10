@@ -73,6 +73,17 @@ base64url encoding of 32 random bytes. Generate that secret in the deployment
 secret store; never commit it. Local HTTP is allowed only for localhost or
 127.0.0.1 with explicit `APP_ENV=dev` or `test`.
 
+The trusted ingress must preserve the public `Host` (including a configured
+nondefault port), overwrite `X-Forwarded-Proto` with exactly one `https` value
+(`http` only for explicitly configured local HTTP), and prevent direct external
+access to the Next listener. Next may construct route request URLs with its
+internal hostname and port; BFF authority therefore uses the preserved `Host`
+and validated protocol instead. `X-Forwarded-Host` is ignored and cannot repair
+a wrong `Host`. Empty, malformed, multiple or wrong protocol values refuse.
+This header contract does not prove TLS; ingress configuration provides it.
+Mutations still require the exact configured browser `Origin`, session CSRF
+nonce and current live founder authority.
+
 Sign-in uses the existing identity service. Every protected page and BFF request
 requires the actual user's current enabled founder entitlement, active session
 and live MFA. The sealed host-only Secure/HttpOnly/SameSite=Strict cookie holds

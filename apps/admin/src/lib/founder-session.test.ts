@@ -58,6 +58,98 @@ afterEach(() => {
 });
 
 describe('founder admin session security boundaries', () => {
+  it('accepts the configured public HTTPS authority when Next constructs an internal request URL', () => {
+    const origin = 'https://admin.intafaced.test';
+    const request = new Request('https://localhost:3100/api/crm', {
+      method: 'POST',
+      headers: {
+        host: 'admin.intafaced.test',
+        'x-forwarded-proto': 'https',
+        origin,
+        'sec-fetch-site': 'same-origin',
+      },
+    });
+    expect(() => assertAdminOrigin(request, config({ origin }), true)).not.toThrow();
+  });
+
+  it.each([
+    ['wrong Host with forged forwarded host', { host: 'evil.example.test', 'x-forwarded-host': 'admin.example.test' }],
+    ['empty Host', { host: '' }],
+    ['wrong Host port', { host: 'admin.example.test:3100' }],
+    ['unexpected default Host port', { host: 'admin.example.test:443' }],
+    ['invalid Host port', { host: 'admin.example.test:invalid' }],
+    ['Host user information', { host: 'user@admin.example.test' }],
+    ['multiple Host values', { host: 'admin.example.test,evil.example.test' }],
+    ['wrong forwarded scheme', { 'x-forwarded-proto': 'http' }],
+    ['empty forwarded scheme', { 'x-forwarded-proto': '' }],
+    ['mixed forwarded protocols', { 'x-forwarded-proto': 'https,http' }],
+    ['reverse mixed forwarded protocols', { 'x-forwarded-proto': 'http,https' }],
+    ['multiple matching forwarded protocols', { 'x-forwarded-proto': 'https, https' }],
+    ['uppercase forwarded protocol', { 'x-forwarded-proto': 'HTTPS' }],
+    ['malformed forwarded protocol', { 'x-forwarded-proto': 'https://' }],
+    ['wrong browser Origin', { origin: 'https://evil.example.test' }],
+    ['cross-site browser request', { 'sec-fetch-site': 'cross-site' }],
+  ] as const)('refuses %s despite an otherwise configured public authority', (_label, overrides) => {
+    const request = new Request('https://localhost:3100/api/crm', {
+      method: 'POST',
+      headers: { host: 'admin.example.test', 'x-forwarded-proto': 'https', origin: ORIGIN, ...overrides },
+    });
+    expect(() => assertAdminOrigin(request, config(), true)).toThrowError(
+      expect.objectContaining({ code: 'admin.session_origin', status: 403 }),
+    );
+  });
+
+  it('requires the configured scheme when the forwarded protocol is absent, and matches Host case and configured port', () => {
+    const cfg = config({ origin: 'https://admin.example.test:8443' });
+    const secure = new Request('https://localhost:3100/api/session', { headers: { host: 'ADMIN.EXAMPLE.TEST:8443' } });
+    expect(() => assertAdminOrigin(secure, cfg, false)).not.toThrow();
+    const insecure = new Request('http://localhost:3100/api/session', { headers: { host: 'admin.example.test:8443' } });
+    expect(() => assertAdminOrigin(insecure, cfg, false)).toThrowError(
+      expect.objectContaining({ code: 'admin.session_origin', status: 403 }),
+    );
+  });
+
+  it('keeps Host-absent constructed requests bound to the full URL origin and validates any protocol header', () => {
+    expect(() => assertAdminOrigin(new Request(`${ORIGIN}/api/session`), config(), false)).not.toThrow();
+    for (const request of [
+      new Request('https://localhost:3100/api/session', { headers: { 'x-forwarded-proto': 'https' } }),
+      new Request(`${ORIGIN}/api/session`, { headers: { 'x-forwarded-proto': 'https,http' } }),
+      new Request(`${ORIGIN}/api/session`, { headers: { 'x-forwarded-proto': 'http' } }),
+    ]) {
+      expect(() => assertAdminOrigin(request, config(), false)).toThrowError(
+        expect.objectContaining({ code: 'admin.session_origin', status: 403 }),
+      );
+    }
+  });
+
+  it('retains session CSRF and live founder validation on a mutation forwarded to an internal listener', async () => {
+    vi.stubEnv('ADMIN_SESSION_SECRET', config().key.toString('base64url'));
+    vi.stubEnv('ADMIN_ORIGIN', ORIGIN);
+    vi.stubEnv('EDGE_URL', EDGE);
+    const authNow = new Date();
+    const current = session({ issuedAt: authNow.toISOString(), expiresAt: new Date(authNow.getTime() + 60_000).toISOString() });
+    const sealed = sealFounderSession(current, config(), authNow);
+    const headers = {
+      host: 'admin.example.test',
+      'x-forwarded-proto': 'https',
+      origin: ORIGIN,
+      cookie: `${ADMIN_COOKIE}=${sealed}`,
+      'x-intafaced-csrf': current.csrf,
+    };
+    const fetchMock = vi.fn(async () => entitlement('enabled'));
+    vi.stubGlobal('fetch', fetchMock);
+    const request = new Request('http://localhost:3100/api/crm', { method: 'POST', headers });
+    await expect(authorizeAdminRequest(request)).resolves.toMatchObject({ session: { userId: USER_ID } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockClear();
+    await expect(
+      authorizeAdminRequest(new Request(request.url, { method: 'POST', headers: { ...headers, 'x-intafaced-csrf': 'wrong' } })),
+    ).rejects.toMatchObject({ code: 'admin.session_csrf', status: 403 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockImplementation(async () => entitlement('revoked'));
+    await expect(authorizeAdminRequest(request)).rejects.toMatchObject({ code: 'admin.founder_required', status: 403 });
+  });
+
   it.each(['fetch', 'body'] as const)(
     'refuses a stalled %s within the request deadline even when transport ignores abort',
     async (phase) => {
