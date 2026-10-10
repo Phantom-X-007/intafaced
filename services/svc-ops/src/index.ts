@@ -1,4 +1,10 @@
 import Fastify from 'fastify';
+import { createHash } from 'node:crypto';
+import postgres from 'postgres';
+import { migrateOutreach } from './db/migrate.js';
+import { OutreachCrm } from './outreach/crm.js';
+import { createFounderAuthority } from './outreach/authority.js';
+import { createClientIpResolver } from './outreach/client-ip.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -35,23 +41,59 @@ const ops = new OpsService({
   identityTeamSource: async () => ({ status: 'absent', code: OPS_IDENTITY_UNWIRED, rows: [] }),
 });
 
-const appRouter = createOpsRouter(ops);
+let crmSql: ReturnType<typeof postgres> | null = null;
+const poolMax = Number(process.env.OPS_DATABASE_POOL_MAX);
+if (process.env.DATABASE_URL && Number.isInteger(poolMax) && poolMax > 0) {
+  const candidate = postgres(process.env.DATABASE_URL, {
+    max: poolMax,
+    onnotice: () => undefined,
+    connection: { application_name: 'ops', statement_timeout: 15000 },
+  });
+  try {
+    await migrateOutreach(candidate);
+    crmSql = candidate;
+  } catch {
+    await candidate.end({ timeout: 1 });
+  }
+}
+let outreachConfiguration: unknown = null;
+try {
+  outreachConfiguration = JSON.parse(process.env.OPS_OUTREACH_CONFIG ?? 'null');
+} catch {
+  /* Invalid configuration refuses intake. */
+}
+const crm = new OutreachCrm(crmSql, outreachConfiguration);
+const appRouter = createOpsRouter(ops, {
+  crm,
+  authority: createFounderAuthority({
+    identityUrl: env.IDENTITY_URL,
+    serviceSecret: process.env.INTERNAL_SERVICE_SECRET,
+    principalSecret: env.EDGE_PRINCIPAL_SECRET,
+  }),
+});
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+const resolveClientIp = createClientIpResolver(process.env.OPS_TRUSTED_PROXY_CIDRS);
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000, trustProxy: false });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
   // Env URL is configured, not a live probe. Sources stay hardcoded-absent. This process does not fetch.
   ...opsReadyUrlHonesty(env),
+  outreach: { storage: crmSql ? 'configured' : 'unavailable', engagement: { status: 'disabled', reason: 'api_access_unavailable' } },
 }));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    createContext: async ({ req }) => ({
+      ...(await edgeContext({ headers: req.headers, id: req.id })),
+      outreachAbuseKey: createHash('sha256')
+        .update(resolveClientIp(req.raw.socket.remoteAddress, req.headers['x-intafaced-client-ip']))
+        .digest('hex'),
+    }),
   } satisfies FastifyTRPCPluginOptions<OpsRouter>['trpcOptions'],
 });
 
@@ -62,6 +104,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await crmSql?.end({ timeout: 5 });
       process.exit(0);
     })();
   });

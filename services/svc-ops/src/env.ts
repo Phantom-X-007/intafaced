@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { baseEnvSchema, edgeEnvSchema, httpEnvSchema, internalServiceEnvSchema, loadEnv, otelEnvSchema } from '@intafaced/config';
 
 /**
- * svc-ops — thin CRM / team / revenue / projects. No Postgres, no payroll, no
+ * svc-ops — durable outreach CRM / team / revenue / projects. No payroll, no
  * second money book. HTTP_PORT 4022: 4020 is tax; 4021 is reserved.
  */
 const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
