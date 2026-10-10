@@ -33,6 +33,8 @@ export const guestNotificationCodeSchema = z.enum([
   'guest.acceptance_unknown',
   'guest.storage_unavailable',
   'guest.address_rate_limited',
+  'guest.submission_erased',
+  'guest.delivery_in_progress',
 ]);
 
 /** Gateway acceptance is evidence of acceptance, never arrival or a completed review. */
@@ -67,8 +69,23 @@ export const guestNotificationReceiptSchema = z
   });
 export type GuestNotificationReceipt = z.infer<typeof guestNotificationReceiptSchema>;
 
+export const guestNotificationEraseInputSchema = z.object({ requestId: id, submissionId: id }).strict();
+export const guestNotificationEraseReceiptSchema = z
+  .object({
+    requestId: id,
+    submissionId: id,
+    erasedCount: z.number().int().safe().nonnegative(),
+    erasedAt: timestamp,
+  })
+  .strict();
+
 /** Both operations use exact-body authenticated POSTs restricted to svc-ops. */
 export interface GuestNotificationsContract {
   send(context: Context, input: GuestNotificationSendInput): Promise<GuestNotificationReceipt>;
   get(context: Context, input: z.infer<typeof guestNotificationGetInputSchema>): Promise<GuestNotificationReceipt | null>;
+  /** Erase recipient/text; retain a minimal tombstone to refuse future sends. */
+  eraseSubmission(
+    context: Context,
+    input: z.infer<typeof guestNotificationEraseInputSchema>,
+  ): Promise<z.infer<typeof guestNotificationEraseReceiptSchema>>;
 }
