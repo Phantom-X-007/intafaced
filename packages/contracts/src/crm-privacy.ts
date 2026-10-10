@@ -38,7 +38,7 @@ export const crmErasureBeginInputSchema = z
   })
   .strict();
 export const crmErasureAdvanceInputSchema = z.object({ requestId: id, intentId: id, expectedRevision: revision }).strict();
-export const crmErasureStatusInputSchema = z.object({ intentId: id }).strict();
+export const crmErasureStatusInputSchema = z.union([z.object({ intentId: id }).strict(), z.object({ canonicalContactId: id }).strict()]);
 export const crmErasureStatusSchema = z
   .object({
     intentId: id,
