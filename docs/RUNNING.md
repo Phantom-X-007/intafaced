@@ -94,6 +94,13 @@ contact/retention build values. These are
 configuration inputs, not evidence that a host, founder identity, provider,
 domain, or delivery route has been verified.
 
+The admin ingress must preserve its configured public `Host`, overwrite
+`X-Forwarded-Proto` with one `https` value and keep the Next listener private.
+Next can construct request URLs using its internal host; the BFF validates the
+preserved public authority while retaining browser Origin, CSRF and current
+founder checks. See `apps/admin/README.md` for the exact proxy contract. This
+local Compose overlay does not provision that ingress or prove deployed TLS.
+
 On a **fresh local development volume**, `tooling/infra/postgres-init/01-service-schemas.sql`
 creates the dedicated `svc_ops` role and `ops` schema alongside `svc_core_ops`
 and `core_ops`. The CRM service owns and runs its own transactional migrations
