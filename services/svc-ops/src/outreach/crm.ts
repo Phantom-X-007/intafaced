@@ -33,6 +33,15 @@ import {
   type OutreachDraft,
 } from '@intafaced/contracts';
 import { nextReviewAt, OutreachError, outreachConfigSchema, type OutreachConfig } from './config.js';
+import {
+  OutreachPrivacy,
+  privacyReadLock,
+  withPrivacySnapshot,
+  assertContactWritable,
+  assertSubmissionWritable,
+  assertRequestNotErased,
+} from './privacy.js';
+import { createOutreachNotificationClient, type OutreachNotificationPort } from './notification-client.js';
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -83,11 +92,15 @@ type SubmissionRow = { id: string; contact_id: string; capability_hash: string; 
 
 /** One persistence boundary for intake and staff workflow. No public email lookup exists. */
 export class OutreachCrm {
+  readonly privacy: OutreachPrivacy;
   constructor(
     private readonly sql: Sql | null,
     private readonly configuration: unknown,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    notify: OutreachNotificationPort = createOutreachNotificationClient({}),
+  ) {
+    this.privacy = new OutreachPrivacy(sql, configuration, notify, now);
+  }
   private configured(): { sql: Sql; config: OutreachConfig } {
     if (!this.sql) throw new OutreachError('ops.crm.storage_unconfigured');
     const parsed = outreachConfigSchema.safeParse(this.configuration);
@@ -100,7 +113,15 @@ export class OutreachCrm {
   ): Promise<T> {
     const { sql, config } = this.configured();
     try {
-      return await transaction(sql, (tx) => fn(tx, config), { isolation });
+      if (isolation === 'repeatable read') return await withPrivacySnapshot(sql, (tx) => fn(tx, config));
+      return await transaction(
+        sql,
+        async (tx) => {
+          await privacyReadLock(tx);
+          return fn(tx, config);
+        },
+        { isolation },
+      );
     } catch (error) {
       if (error instanceof OutreachError || (error instanceof Error && error.name === 'ZodError')) throw error;
       throw new OutreachError('ops.crm.storage_unavailable');
@@ -118,8 +139,11 @@ export class OutreachCrm {
       ON CONFLICT(key_hash,window_start) DO UPDATE SET attempts=ops.crm_rate_windows.attempts+1 RETURNING attempts`;
     return Number(rows[0]?.attempts);
   }
-  private async lockRequest(tx: Sql, id: string): Promise<void> {
+  private async lockRequest(tx: Sql, id: string, prospect = false): Promise<void> {
     await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.request:' || ${id}))`;
+    await assertRequestNotErased(tx, id, prospect);
+    if ((await tx`SELECT 1 FROM ops.crm_privacy_requests WHERE request_id=${id}`).length)
+      throw new OutreachError('ops.crm.idempotency_conflict');
   }
   private async replay(tx: Sql, requestId: string, actor: string, operation: string, input: unknown): Promise<unknown | null> {
     const rows = await tx`SELECT actor_key,operation,fingerprint,result FROM ops.crm_requests WHERE request_id=${requestId}`;
@@ -142,6 +166,7 @@ export class OutreachCrm {
       VALUES (${requestId},${actor},${operation},${fingerprint(input)},${tx.json(JSON.parse(JSON.stringify(result)))},${submissionId})`;
   }
   private async authenticate(tx: Sql, input: OutreachContinuationInput): Promise<SubmissionRow> {
+    await assertSubmissionWritable(tx, input.submissionId);
     const rows = await tx<SubmissionRow[]>`SELECT * FROM ops.crm_submissions WHERE id=${input.submissionId} FOR UPDATE`;
     const row = rows[0];
     if (!row || !sameHash(row.capability_hash, hash(input.continuationToken)) || new Date(row.expires_at).getTime() <= this.now().getTime())
@@ -156,7 +181,7 @@ export class OutreachCrm {
     const input = normalizeIds(outreachCaptureInputSchema.parse(raw));
     await this.publicRate(abuseKey);
     return this.write(async (tx, config) => {
-      await this.lockRequest(tx, input.requestId);
+      await this.lockRequest(tx, input.requestId, true);
       const previous = await tx`SELECT submission_id FROM ops.crm_requests WHERE request_id=${input.requestId}`;
       // Authenticate the capability BEFORE revealing/replaying the previous result.
       if (previous[0]) {
@@ -246,7 +271,7 @@ export class OutreachCrm {
     const input = normalizeIds(outreachQuestionnaireInputSchema.parse(raw));
     await this.publicRate(abuseKey);
     return this.write(async (tx) => {
-      await this.lockRequest(tx, input.requestId);
+      await this.lockRequest(tx, input.requestId, true);
       const row = await this.authenticate(tx, input);
       const businessInput = { ...input, continuationToken: undefined };
       const replay = await this.replay(tx, input.requestId, `prospect:${row.id}`, 'answer', businessInput);
@@ -284,7 +309,7 @@ export class OutreachCrm {
     const input = normalizeIds(workflow.outreachAddInterestsInputSchema.parse(raw));
     await this.publicRate(abuseKey);
     return this.write(async (tx, config) => {
-      await this.lockRequest(tx, input.requestId);
+      await this.lockRequest(tx, input.requestId, true);
       // Serialize canonical-link creation against founder merges, before row locks.
       await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.contact-merges'))`;
       const row = await this.authenticate(tx, input);
@@ -415,6 +440,8 @@ export class OutreachCrm {
     return this.write(async (tx, config) => {
       if (!config.founders.includes(actorUserId)) throw new OutreachError('ops.crm.operator_forbidden');
       await this.lockRequest(tx, input.requestId);
+      const current = await tx`SELECT contact_id FROM ops.crm_opportunities WHERE id=${input.opportunityId}`;
+      if (current[0]) await assertContactWritable(tx, String(current[0].contact_id));
       const replay = await this.replay(tx, input.requestId, `operator:${actorUserId}`, operation, input);
       if (replay !== null) return replay as T;
       const rows = await tx`SELECT record FROM ops.crm_opportunities WHERE id=${input.opportunityId} FOR UPDATE`;
@@ -497,6 +524,11 @@ export class OutreachCrm {
     return this.write(async (tx, config) => {
       if (!config.founders.includes(actor)) throw new OutreachError('ops.crm.operator_forbidden');
       await this.lockRequest(tx, input.requestId);
+      if (operation === 'mergeContacts') {
+        const merge = input as { requestId: string; sourceContactId: string; targetContactId: string };
+        await assertContactWritable(tx, merge.sourceContactId);
+        await assertContactWritable(tx, merge.targetContactId);
+      }
       const replay = await this.replay(tx, input.requestId, `operator:${actor}`, operation, input);
       if (replay !== null) return replay as T;
       const result = await fn(tx, config);

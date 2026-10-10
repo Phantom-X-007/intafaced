@@ -7,6 +7,7 @@ import { createFounderAuthority } from './outreach/authority.js';
 import { createClientIpResolver } from './outreach/client-ip.js';
 import { createOutreachNotificationClient } from './outreach/notification-client.js';
 import { OutreachNotificationWorker } from './outreach/notification-worker.js';
+import { reapplyCompletedErasures } from './outreach/restore-privacy.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -15,6 +16,8 @@ import { createOpsRouter, type OpsRouter } from './router.js';
 import { OpsService } from './ops-service.js';
 import { OPS_IDENTITY_UNWIRED, OPS_SUPPORT_UNWIRED } from './codes.js';
 import { opsReadyUrlHonesty } from './ready-honesty.js';
+
+if (process.env.OPS_OUTREACH_RESTORE_QUARANTINED === '1') throw new Error('ops.crm.restore_quarantined');
 
 registerProcessHooks(
   startTelemetry({
@@ -53,6 +56,7 @@ if (process.env.DATABASE_URL && Number.isInteger(poolMax) && poolMax > 0) {
   });
   try {
     await migrateOutreach(candidate);
+    await reapplyCompletedErasures(candidate);
     crmSql = candidate;
   } catch {
     await candidate.end({ timeout: 1 });
@@ -64,8 +68,8 @@ try {
 } catch {
   /* Invalid configuration refuses intake. */
 }
-const crm = new OutreachCrm(crmSql, outreachConfiguration);
 const notificationPort = createOutreachNotificationClient({ notifyUrl: env.NOTIFY_URL, secret: env.OPS_NOTIFY_SERVICE_SECRET });
+const crm = new OutreachCrm(crmSql, outreachConfiguration, undefined, notificationPort);
 const notificationWorker = crmSql ? new OutreachNotificationWorker(crmSql, notificationPort) : null;
 const appRouter = createOpsRouter(ops, {
   crm,

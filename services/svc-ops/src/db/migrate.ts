@@ -4,7 +4,7 @@ import postgres, { type Sql } from 'postgres';
 
 /** Ops-owned migration journal; one transaction and advisory lock per deployment. */
 export async function migrateOutreach(sql: Sql, direction: 'up' | 'down' = 'up'): Promise<void> {
-  const names = ['0000_outreach_crm', '0001_crm_workflows', '0002_crm_notifications'];
+  const names = ['0000_outreach_crm', '0001_crm_workflows', '0002_crm_notifications', '0003_crm_privacy'];
   const migrations = await Promise.all(
     (direction === 'down' ? [...names].reverse() : names).map(async (name) => ({
       name,
@@ -13,7 +13,10 @@ export async function migrateOutreach(sql: Sql, direction: 'up' | 'down' = 'up')
   );
   await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtext('ops.crm.migrations'))`;
-    await tx`CREATE SCHEMA IF NOT EXISTS ops`;
+    // A preprovisioned service role owns its schema, without database CREATE.
+    // PostgreSQL checks database CREATE even for CREATE SCHEMA IF NOT EXISTS.
+    const schema = await tx`SELECT 1 FROM pg_namespace WHERE nspname='ops'`;
+    if (!schema.length) await tx`CREATE SCHEMA ops`;
     await tx`CREATE TABLE IF NOT EXISTS ops.crm_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
     for (const migration of migrations) {
       const done = await tx`SELECT name FROM ops.crm_migrations WHERE name = ${migration.name}`;

@@ -60,6 +60,25 @@ export function createOutreachRouter(crm: OutreachCrm, authority: FounderAuthori
     }),
   );
   return router({
+    privacyPreview: staffRead
+      .input(workflow.crmErasurePreviewInputSchema)
+      .output(workflow.crmErasurePreviewSchema)
+      .query(({ input, ctx }) => mapped(() => crm.privacy.preview(input, ctx.principal!.userId))),
+    privacyBegin: staffWrite
+      .input(workflow.crmErasureBeginInputSchema)
+      .output(workflow.crmErasureStatusSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.privacy.begin(input, ctx.principal!.userId))),
+    privacyAdvance: staffWrite
+      .input(workflow.crmErasureAdvanceInputSchema)
+      .output(workflow.crmErasureStatusSchema)
+      .mutation(({ input, ctx }) => mapped(() => crm.privacy.advance(input, ctx.principal!.userId))),
+    privacyStatus: staffRead
+      .input(workflow.crmErasureStatusInputSchema)
+      .output(workflow.crmErasureStatusSchema)
+      .query(({ input, ctx }) => mapped(() => crm.privacy.status(input, ctx.principal!.userId))),
+    privacyRetentionStatus: staffRead
+      .output(workflow.crmRetentionStatusSchema)
+      .query(() => ({ status: 'disabled' as const, reason: 'published_policy_unconfigured' as const })),
     capture: publicProcedure
       .input(outreachCaptureInputSchema)
       .output(outreachCaptureReceiptSchema)

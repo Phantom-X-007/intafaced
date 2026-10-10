@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { crmSubmissionSchema, guestNotificationSendInputSchema, type GuestNotificationReceipt } from '@intafaced/contracts';
 import { OutreachNotificationError, type OutreachNotificationPort } from './notification-client.js';
+import { privacyReadLock } from './privacy.js';
 
 const retryableRefusals = new Set(['guest.notification_unconfigured', 'guest.configuration_unverified', 'guest.address_rate_limited']);
 
@@ -15,31 +16,37 @@ export class OutreachNotificationWorker {
 
   async runOnce(): Promise<boolean> {
     if (!this.notify.configured) return false;
-    const claimed = await transaction(this.sql, async (tx) => {
-      const rows = await tx`SELECT * FROM ops.crm_outbox WHERE status IN ('pending','unconfigured')
+    const claimed = await transaction(
+      this.sql,
+      async (tx) => {
+        await privacyReadLock(tx);
+        const rows = await tx`SELECT * FROM ops.crm_outbox WHERE status IN ('pending','unconfigured')
+        AND NOT EXISTS (SELECT 1 FROM ops.crm_erasure_intents e WHERE ops.crm_outbox.submission_id=ANY(e.submission_ids))
         AND retry_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<=clock_timestamp())
         ORDER BY retry_at,created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`;
-      const row = rows[0];
-      if (!row) return null;
-      let wire: unknown = row.dispatch_payload;
-      if (!wire) {
-        const submissions = await tx`SELECT record FROM ops.crm_submissions WHERE id=${row.submission_id}`;
-        const original = crmSubmissionSchema.parse(submissions[0]?.record);
-        wire = {
-          businessKey: row.business_key,
-          contactId: original.contactId,
-          submissionId: original.submissionId,
-          recipientEmail: original.contact.email,
-          message: { kind: 'enquiry_acknowledgement' },
-        };
-        if (row.kind !== 'enquiry_acknowledgement') throw new Error('ops.crm.dispatch_payload_missing');
-      }
-      const input = guestNotificationSendInputSchema.parse(wire),
-        token = randomUUID();
-      await tx`UPDATE ops.crm_outbox SET dispatch_payload=${tx.json(input)},lease_token=${token},
+        const row = rows[0];
+        if (!row) return null;
+        let wire: unknown = row.dispatch_payload;
+        if (!wire) {
+          const submissions = await tx`SELECT record FROM ops.crm_submissions WHERE id=${row.submission_id}`;
+          const original = crmSubmissionSchema.parse(submissions[0]?.record);
+          wire = {
+            businessKey: row.business_key,
+            contactId: original.contactId,
+            submissionId: original.submissionId,
+            recipientEmail: original.contact.email,
+            message: { kind: 'enquiry_acknowledgement' },
+          };
+          if (row.kind !== 'enquiry_acknowledgement') throw new Error('ops.crm.dispatch_payload_missing');
+        }
+        const input = guestNotificationSendInputSchema.parse(wire),
+          token = randomUUID();
+        await tx`UPDATE ops.crm_outbox SET dispatch_payload=${tx.json(input)},lease_token=${token},
         lease_until=clock_timestamp()+interval '10 seconds',attempts=attempts+1,updated_at=clock_timestamp() WHERE id=${row.id}`;
-      return { id: String(row.id), token, input, attempts: Number(row.attempts) };
-    });
+        return { id: String(row.id), token, input, attempts: Number(row.attempts) };
+      },
+      { isolation: 'read committed' },
+    );
     if (!claimed) return false;
     let receipt: GuestNotificationReceipt | null = null;
     let failureCode: string | null = null;

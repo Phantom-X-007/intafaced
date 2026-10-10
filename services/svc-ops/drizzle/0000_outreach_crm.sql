@@ -1,4 +1,4 @@
-CREATE SCHEMA IF NOT EXISTS ops;
+-- The service migration runner creates or uses its preprovisioned owned schema.
 CREATE TABLE ops.crm_contacts (id uuid PRIMARY KEY, record jsonb NOT NULL);
 CREATE TABLE ops.crm_organisations (id uuid PRIMARY KEY, record jsonb NOT NULL);
 CREATE TABLE ops.crm_contact_organisations (contact_id uuid REFERENCES ops.crm_contacts(id), organisation_id uuid REFERENCES ops.crm_organisations(id), PRIMARY KEY(contact_id, organisation_id));
