@@ -99,8 +99,9 @@ creates the dedicated `svc_ops` role and `ops` schema alongside `svc_core_ops`
 and `core_ops`. The CRM service owns and runs its own transactional migrations
 on startup; the general `migrate` container does not apply them. For an existing
 volume, the init script will not rerun. A database administrator must create
-the dedicated role/schema and grant only the ownership needed by the CRM's own
-migrations before setting `OPS_DATABASE_URL`. Do not solve this with a broad
+the dedicated role/schema with explicit database `CONNECT` and schema ownership
+for the CRM's own migrations before setting `OPS_DATABASE_URL`. Database `CREATE`
+is not required once the owned schema exists. Do not solve this with a broad
 grant, `intafaced_ops`, or the local `svc_ops` development password. Production
 role credentials must come from the production secret manager.
 
