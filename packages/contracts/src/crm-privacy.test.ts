@@ -1,8 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { crmErasureBeginInputSchema, crmErasurePreviewInputSchema, crmErasureStatusSchema } from './crm-privacy.js';
+import {
+  crmErasureBeginInputSchema,
+  crmErasurePreviewInputSchema,
+  crmErasureStatusInputSchema,
+  crmErasureStatusSchema,
+} from './crm-privacy.js';
 
 describe('strict founder cluster erasure contracts', () => {
+  it('recovers saved intents by exactly one internal identifier, without contact details', () => {
+    const intentId = randomUUID(),
+      canonicalContactId = randomUUID();
+    expect(crmErasureStatusInputSchema.parse({ intentId })).toEqual({ intentId });
+    expect(crmErasureStatusInputSchema.parse({ canonicalContactId })).toEqual({ canonicalContactId });
+    for (const value of [
+      {},
+      { intentId, canonicalContactId },
+      { email: 'private@example.test' },
+      { canonicalContactId, actor: randomUUID() },
+    ])
+      expect(crmErasureStatusInputSchema.safeParse(value).success).toBe(false);
+  });
   it('requires whole-cluster confirmation and a reviewed snapshot, never an email identity', () => {
     const value = {
       requestId: randomUUID(),
