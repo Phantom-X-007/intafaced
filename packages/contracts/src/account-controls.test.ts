@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   accountControlInputSchema,
   accountControlResultSchema,
+  accountOperatorEntitlementSchema,
   currentAuthorityInputSchema,
   currentAuthorityResultSchema,
   operationAdmissionInputSchema,
@@ -188,6 +189,16 @@ describe('founder account-control wire boundary', () => {
 });
 
 describe('current authority snapshot', () => {
+  it('keeps revocable operator entitlement distinct from session and admission authority', () => {
+    const enabled = { status: 'enabled', userId: USER, version: '1', changedAt: NOW };
+    expect(accountOperatorEntitlementSchema.safeParse(enabled).success).toBe(true);
+    expect(accountOperatorEntitlementSchema.safeParse({ ...enabled, status: 'revoked' }).success).toBe(true);
+    expect(accountOperatorEntitlementSchema.safeParse({ status: 'unconfigured', userId: USER }).success).toBe(true);
+    expect(accountOperatorEntitlementSchema.safeParse({ status: 'not_operator', userId: USER }).success).toBe(true);
+    expect(accountOperatorEntitlementSchema.safeParse({ ...enabled, mfa: true }).success).toBe(false);
+    expect(accountOperatorEntitlementSchema.safeParse({ ...enabled, status: 'unknown' }).success).toBe(false);
+  });
+
   it('binds a maximum-five-second snapshot to its requested account and credential', () => {
     expect(currentAuthorityInputSchema.parse(subject)).toEqual(subject);
     expect(currentAuthorityResultSchema.parse(eligible).status).toBe('eligible');

@@ -115,6 +115,15 @@ export const currentAuthorityInputSchema = z
   .strict();
 export type CurrentAuthorityInput = z.infer<typeof currentAuthorityInputSchema>;
 
+/** Identity's revocable founder entitlement; it does not assert session MFA or grant a scope. */
+export const accountOperatorEntitlementSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('enabled'), userId: id, version, changedAt: timestamp }).strict(),
+  z.object({ status: z.literal('revoked'), userId: id, version, changedAt: timestamp }).strict(),
+  z.object({ status: z.literal('unconfigured'), userId: id }).strict(),
+  z.object({ status: z.literal('not_operator'), userId: id }).strict(),
+]);
+export type AccountOperatorEntitlement = z.infer<typeof accountOperatorEntitlementSchema>;
+
 const ownership = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('session'), ownership: sessionOwnershipSchema.strict() }).strict(),
   z.object({ kind: z.literal('api_key'), ownership: apiKeyOwnershipSchema.strict() }).strict(),
@@ -277,6 +286,7 @@ export function recoveryMatchesAdmission(input: unknown, stored: unknown): boole
  */
 export interface AccountControlsContract {
   change(context: Context & { principal: Principal }, input: AccountControlInput): Promise<AccountControlResult>;
+  operatorEntitlement(context: Context, input: { userId: string }): Promise<AccountOperatorEntitlement>;
   currentAuthority(context: Context, input: CurrentAuthorityInput): Promise<CurrentAuthorityResult>;
   admit(context: Context, input: OperationAdmissionInput): Promise<OperationAdmissionResult>;
   resolveRecovery(context: Context, input: OperationRecoveryInput): Promise<CommittedOperationAdmission>;
