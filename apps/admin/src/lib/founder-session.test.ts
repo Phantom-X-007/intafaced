@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ADMIN_COOKIE,
   adminSessionConfig,
+  AdminSessionError,
+  adminSessionErrorResponse,
   assertAdminCsrf,
   assertAdminOrigin,
   assertCurrentFounder,
@@ -9,6 +11,7 @@ import {
   founderCookie,
   founderEdgeCall,
   openFounderSession,
+  upstreamAuthCode,
   sealFounderSession,
   type AdminSessionConfig,
   type FounderSession,
@@ -307,6 +310,57 @@ describe('founder admin session security boundaries', () => {
     const authorized = await authorizeAdminRequest(request);
     expect(authorized.session.userId).toBe(USER_ID);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the exact envelope svc-identity sends: error.data.intafacedCode, no json wrapper', async () => {
+    // Shape from packages/contracts/src/trpc.ts (errorFormatter) with no transformer; see apps/customer/src/shared/api.ts.
+    const identityRefusal = (data: Record<string, unknown>, status: number, code: string) =>
+      vi.fn(async () =>
+        Response.json({ error: { message: 'Invite already used', code, data: { code, httpStatus: status, ...data } } }, { status }),
+      );
+    vi.stubGlobal('fetch', identityRefusal({ intafacedCode: 'auth.invite_used', cause: { code: 'auth.invite_used' } }, 409, 'CONFLICT'));
+    await expect(founderEdgeCall(config(), 'identity', 'auth.registerFounder', 'POST', {})).rejects.toMatchObject({
+      code: 'admin.upstream_refused',
+      status: 409,
+      upstreamCode: 'auth.invite_used',
+    });
+    // intafacedCode is undefined for errors without an AuthError cause; the named cause code is then the source.
+    vi.stubGlobal('fetch', identityRefusal({ intafacedCode: undefined, cause: { code: 'auth.invalid_credentials' } }, 401, 'UNAUTHORIZED'));
+    await expect(founderEdgeCall(config(), 'identity', 'auth.login', 'POST', {})).rejects.toMatchObject({
+      code: 'admin.authority_refused',
+      upstreamCode: 'auth.invalid_credentials',
+    });
+    expect(upstreamAuthCode({ error: { data: { intafacedCode: 'auth.mfa_invalid' } } })).toBe('auth.mfa_invalid');
+  });
+
+  it('accepts a transformer-wrapped body only as a fallback', () => {
+    expect(upstreamAuthCode({ error: { json: { data: { intafacedCode: 'auth.invite_used' } } } })).toBe('auth.invite_used');
+    expect(upstreamAuthCode({ error: { data: { intafacedCode: 'auth.a_code' }, json: { data: { intafacedCode: 'auth.b_code' } } } })).toBe(
+      'auth.a_code',
+    );
+  });
+
+  it('carries only a well-formed auth.* upstream code through a refusal', async () => {
+    const trpcError = (data: unknown, status: number) => vi.fn(async () => Response.json({ error: { message: 'x', data } }, { status }));
+    for (const odd of ['ledger.insufficient_funds', 'auth.<script>', 'auth.', 42, 'AUTH.X']) {
+      vi.stubGlobal('fetch', trpcError({ intafacedCode: odd }, 400));
+      const refusal = await founderEdgeCall(config(), 'identity', 'auth.login', 'POST', {}).catch((e: unknown) => e);
+      expect((refusal as { upstreamCode?: string }).upstreamCode).toBeUndefined();
+    }
+  });
+
+  it('puts an upstream code in the reply only when the route allows that code', async () => {
+    const refused = new AdminSessionError('admin.upstream_refused', 409, 'auth.invite_used');
+    expect(await adminSessionErrorResponse(refused, ['auth.invite_used', 'auth.handle_taken']).json()).toEqual({
+      code: 'admin.upstream_refused',
+      upstreamCode: 'auth.invite_used',
+    });
+    // Opt-in: no list means none, and a list that does not name the code means none.
+    expect(await adminSessionErrorResponse(refused).json()).toEqual({ code: 'admin.upstream_refused' });
+    expect(await adminSessionErrorResponse(refused, ['auth.handle_taken']).json()).toEqual({ code: 'admin.upstream_refused' });
+    expect(await adminSessionErrorResponse(new AdminSessionError('admin.upstream_refused', 503), ['auth.invite_used']).json()).toEqual({
+      code: 'admin.upstream_refused',
+    });
   });
 
   it('maps upstream authorization failures to a refusal and rejects non-success status', async () => {

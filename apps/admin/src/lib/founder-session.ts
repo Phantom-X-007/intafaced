@@ -24,9 +24,28 @@ export class AdminSessionError extends Error {
   constructor(
     public readonly code: string,
     public readonly status: number,
+    /** svc-identity's own refusal code (`auth.*` only), so a page can say "invite already used" rather than "refused". */
+    public readonly upstreamCode?: string,
   ) {
     super(code);
   }
+}
+
+const UPSTREAM_AUTH_CODE = /^auth\.[a-z][a-z_]{1,62}$/;
+
+type ErrorData = { intafacedCode?: unknown; cause?: { code?: unknown } };
+
+/**
+ * The typed `auth.*` code from a tRPC error body, or undefined. svc-identity has no tRPC transformer, so its refusal body is
+ * `{ error: { message, code, data: { intafacedCode, cause: { code } } } }` (see packages/contracts/src/trpc.ts, and
+ * apps/customer/src/shared/api.ts which reads the same). Reads `data.intafacedCode`, else `data.cause.code`. A transformer-wrapped
+ * body (`error.json.data`) is accepted as a fallback only.
+ */
+export function upstreamAuthCode(body: unknown): string | undefined {
+  const error = (body as { error?: { data?: ErrorData; json?: { data?: ErrorData } } } | null)?.error;
+  const data = error?.data ?? error?.json?.data;
+  const code = data?.intafacedCode ?? data?.cause?.code;
+  return typeof code === 'string' && UPSTREAM_AUTH_CODE.test(code) ? code : undefined;
 }
 
 export function adminSessionConfig(env: Record<string, string | undefined> = process.env): AdminSessionConfig {
@@ -177,6 +196,7 @@ export async function founderEdgeCall(
     throw new AdminSessionError(
       response.status === 401 || response.status === 403 ? 'admin.authority_refused' : 'admin.upstream_refused',
       response.status >= 400 && response.status < 600 ? response.status : 502,
+      upstreamAuthCode(body),
     );
   if (!body || typeof body !== 'object' || !('result' in body)) throw new AdminSessionError('admin.upstream_invalid', 502);
   const result = (body as { result?: { data?: unknown } }).result;
@@ -204,9 +224,18 @@ export async function authorizeAdminRequest(request: Request): Promise<{ session
   return { session, config };
 }
 
-export function adminSessionErrorResponse(error: unknown): Response {
+/**
+ * The error reply. An upstream `auth.*` code is a hint for one page's copy, and some of them tell more than they should (login's
+ * `auth.mfa_invalid` against `auth.invalid_credentials` would say whether a password was right). So it is sent only when this
+ * route names it in `allowUpstream`; with no list, none is sent.
+ */
+export function adminSessionErrorResponse(error: unknown, allowUpstream?: readonly string[]): Response {
   const known = error instanceof AdminSessionError ? error : new AdminSessionError('admin.request_failed', 500);
-  return Response.json({ code: known.code }, { status: known.status, headers: { 'cache-control': 'no-store' } });
+  const upstream = known.upstreamCode && allowUpstream?.includes(known.upstreamCode) ? known.upstreamCode : undefined;
+  return Response.json(upstream ? { code: known.code, upstreamCode: upstream } : { code: known.code }, {
+    status: known.status,
+    headers: { 'cache-control': 'no-store' },
+  });
 }
 
 export function founderCookie(value: string, maxAge: number): string {

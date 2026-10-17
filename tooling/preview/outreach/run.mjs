@@ -137,6 +137,10 @@ function reply(response, status, body) {
 
 function failure(error) {
   if (error instanceof FixtureError) return { status: error.status, code: error.code };
+  // The founder identity stand-ins throw their own error classes with the same { code, status } shape.
+  if (typeof error?.code === 'string' && /^auth\.[a-z_]+$/.test(error.code) && Number.isInteger(error?.status)) {
+    return { status: error.status, code: error.code };
+  }
   if (error?.name === 'ZodError' || error instanceof SyntaxError) return { status: 400, code: 'ops.crm.invalid_input' };
   console.error('Preview fixture defect:', error);
   return { status: 500, code: 'ops.crm.storage_unavailable' };
@@ -187,14 +191,14 @@ function edgeServer(fixture) {
     const url = new URL(request.url, 'http://edge');
     const procedure = /^\/api\/(?:identity|ops)\/trpc\/(.+)$/.exec(url.pathname)?.[1];
     const handler = procedure && fixture.founderApi[procedure];
-    if (!handler)
-      return reply(response, 404, { error: { json: { message: 'not available in the local preview', data: { path: url.pathname } } } });
+    if (!handler) return reply(response, 404, { error: { message: 'not available in the local preview', data: { path: url.pathname } } });
     try {
       const input = request.method === 'POST' ? await readJson(request) : JSON.parse(url.searchParams.get('input') ?? '{}');
       return reply(response, 200, { result: { data: { json: handler(input) } } });
     } catch (error) {
       const { status, code } = failure(error);
-      return reply(response, status, { error: { json: { message: code, data: { httpStatus: status } } } });
+      // intafacedCode is where the real services put their typed code, and where the console reads it.
+      return reply(response, status, { error: { message: code, code: 'BAD_REQUEST', data: { httpStatus: status, intafacedCode: code } } });
     }
   };
 }
@@ -266,6 +270,8 @@ async function main() {
         APP_ENV: 'dev',
         // Launch scope: the founder CRM only; the exchange modules answer 404.
         ADMIN_MODULES: 'crm',
+        // Shows the one-time founder sign-up page with the TEST invites. Off unless set to exactly 'open'.
+        ADMIN_FOUNDER_ENROLMENT: 'open',
         NEXT_TELEMETRY_DISABLED: '1',
       },
       stdio: ['ignore', 'ignore', 'inherit'],
@@ -304,6 +310,9 @@ INTAFACED local preview — test data, not live. Nothing is saved, emailed or de
   Questionnaire   http://localhost:${PUBLIC_PORT}/invest${phoneLines()}
   Founder CRM     http://localhost:${ADMIN_PORT}/crm
                   sign in with any email and password, code 123456
+  Founder sign-up http://localhost:${ADMIN_PORT}/enroll   invite TEST-INVITE-NITRO, code 123456
+  Security        http://localhost:${ADMIN_PORT}/security (after signing in)
+  Forgot password http://localhost:${ADMIN_PORT}/reset    code 123456 + recovery code FACED-00001
 
 An enquiry sent from the questionnaire appears in the CRM. Restarting resets everything.
 Press Ctrl+C to stop.
