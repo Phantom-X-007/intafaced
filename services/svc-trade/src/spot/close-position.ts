@@ -7,6 +7,7 @@ import type { Sql } from 'postgres';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 import { env } from '../env.js';
 import { orderIdFor } from './ids.js';
+import { isDefiniteLedgerRefusal, ledgerOutcomeUnknown } from './hold-outcome.js';
 import { closePositionOnMatching, type MatchingCloseRequest } from './matching-close.js';
 import type { EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { assertMarketOpen, assertSettlementRails, assertTradable, holdFor } from './risk.js';
@@ -152,6 +153,14 @@ export async function closeSpotPosition(svc: TradeService, principal: Principal,
         withLedgerAttribution(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }), attribution),
       );
     } catch (err) {
+      // Delete the intent row only on a typed refusal made before anything committed. Any other ending (timeout,
+      // deadline, network, 5xx, malformed acknowledgement) can follow a booked hold, and the engine has ALREADY executed
+      // this flatten, so the row is kept and marked `recovery_required`: it is never auto-deleted by reconcile, a retry
+      // returns it as it stands, and an operator sees the order instead of a silent pending row.
+      if (!isDefiniteLedgerRefusal(err)) {
+        await host.markRecoveryRequired(orderId, 'SUBMIT_UNKNOWN');
+        throw ledgerOutcomeUnknown(orderId, err);
+      }
       await host.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
       throw err;
     }
